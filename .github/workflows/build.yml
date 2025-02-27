@@ -9,7 +9,7 @@ jobs:
   detect-and-build:
     # Check if the branch name matches Release.#.#.#
     if: startsWith(github.head_ref, 'Release.')
-    runs-on: ubuntu-latest
+    runs-on: windows-latest
     permissions:
       contents: write
       pull-requests: write
@@ -35,6 +35,7 @@ jobs:
         force: true
 
     - name: Clean Git State
+      shell: bash
       run: |
         # Force clean any leftover files
         git clean -fdx
@@ -44,6 +45,7 @@ jobs:
         git status
 
     - name: Validate Branch Name
+      shell: bash
       id: validate
       run: |
         if ! [[ ${{ env.PR_BRANCH }} =~ ^Release\.[0-9]+\.[0-9]+\.[0-9]+$ ]]; then
@@ -66,6 +68,7 @@ jobs:
             - 'LibraryD/**'
 
     - name: Order Dependencies
+      shell: bash
       id: order
       run: |
         python3 - << 'EOF'
@@ -158,6 +161,7 @@ jobs:
         result-encoding: string
 
     - name: Update Versions
+      shell: bash
       id: versions
       run: |
         python3 - << 'EOF'
@@ -334,6 +338,7 @@ jobs:
 
     - name: Commit Version Updates
       if: steps.versions.outputs.version_changes != ''
+      shell: bash
       run: |
         # Configure Git
         git config --local user.email "${{ env.GIT_USER_EMAIL }}"
@@ -392,9 +397,10 @@ jobs:
       id: generate-token
       uses: actions/create-github-app-token@v1
       with:
-        app-id: ${{ env.GITHUB_APP_ID }}
-        private-key: ${{ env.GITHUB_APP_PRIVATE_KEY }}
-        installation-id: ${{ env.GITHUB_APP_INSTALLATION_ID }}
+        app_id: ${{ secrets.ACTION_TEST_APP_ID }}
+        private_key: ${{ secrets.ACTION_TEST_APP_PRIVATE_KEY }}
+        owner: ${{ github.repository_owner }}
+        repositories: ${{ github.event.repository.name }}
 
     - name: Setup .NET
       uses: actions/setup-dotnet@v4
@@ -404,26 +410,8 @@ jobs:
       env:
         NUGET_AUTH_TOKEN: ${{ steps.generate-token.outputs.token }}
 
-    - name: Install NuGet
-      if: contains(steps.order.outputs.ordered_changes, '.nuspec')
-      run: |
-        # Install mono and required components
-        sudo apt-get update
-        sudo apt-get install -y mono-runtime mono-complete mono-devel
-
-        # Download latest NuGet
-        sudo curl -o /usr/local/bin/nuget.exe https://dist.nuget.org/win-x86-commandline/latest/nuget.exe
-        
-        # Create a shell script wrapper for mono nuget.exe
-        sudo bash -c 'cat > /usr/local/bin/nuget << EOL
-        #!/bin/bash
-        mono /usr/local/bin/nuget.exe "\$@"
-        EOL'
-        
-        # Make it executable
-        sudo chmod +x /usr/local/bin/nuget
-
     - name: Build and Pack NuGet Packages
+      shell: bash
       run: |
         # Process ordered changes
         changes="${{ steps.order.outputs.ordered_changes }}"
@@ -462,6 +450,7 @@ jobs:
         done
 
     - name: Publish NuGet Packages
+      shell: bash
       run: |
         for pkg in ${{ env.OUTPUT_DIR }}/*.nupkg; do
           if [ -f "$pkg" ]; then
@@ -472,6 +461,7 @@ jobs:
 
     - name: Create Git Tags
       if: steps.versions.outputs.version_changes != ''
+      shell: bash
       run: |
         # Configure Git
         git config --local user.email "${{ env.GIT_USER_EMAIL }}"
@@ -513,6 +503,7 @@ jobs:
         done
 
     - name: Print Changed Libraries
+      shell: bash
       run: |
         changes="${{ steps.order.outputs.ordered_changes }}"
         if [ "$changes" = "[]" ]; then
