@@ -407,8 +407,21 @@ jobs:
     - name: Install NuGet
       if: contains(steps.order.outputs.ordered_changes, '.nuspec')
       run: |
+        # Download latest NuGet
+        sudo curl -o /usr/local/bin/nuget.exe https://dist.nuget.org/win-x86-commandline/latest/nuget.exe
+        
+        # Create a shell script wrapper for mono nuget.exe
+        sudo bash -c 'cat > /usr/local/bin/nuget << EOL
+        #!/bin/bash
+        mono /usr/local/bin/nuget.exe "\$@"
+        EOL'
+        
+        # Make it executable
+        sudo chmod +x /usr/local/bin/nuget
+        
+        # Install mono runtime
         sudo apt-get update
-        sudo apt-get install -y nuget
+        sudo apt-get install -y mono-runtime
 
     - name: Build and Pack NuGet Packages
       run: |
