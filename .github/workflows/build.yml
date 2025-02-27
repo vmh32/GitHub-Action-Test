@@ -31,6 +31,17 @@ jobs:
       with:
         fetch-depth: 0
         ref: ${{ env.PR_BRANCH }}
+        clean: true
+        force: true
+
+    - name: Clean Git State
+      run: |
+        # Force clean any leftover files
+        git clean -fdx
+        # Reset any pending changes
+        git reset --hard HEAD
+        # Make sure the working directory is clean
+        git status
 
     - name: Validate Branch Name
       id: validate
@@ -320,11 +331,44 @@ jobs:
     - name: Commit Version Updates
       if: steps.versions.outputs.version_changes != ''
       run: |
+        # Configure Git
         git config --local user.email "${{ env.GIT_USER_EMAIL }}"
         git config --local user.name "${{ env.GIT_USER_NAME }}"
+        
+        # Make sure the working directory is clean
+        git clean -fd
+        
+        # Add and commit changes
         git add -A
-        git commit -m "Update versions based on PR analysis [skip ci]" || exit 0
-        git push
+        git status
+        
+        # Try to commit, with error handling
+        if ! git commit -m "Update versions based on PR analysis [skip ci]"; then
+          echo "No changes to commit or commit failed"
+          exit 0
+        fi
+        
+        # Try to push, with retries
+        max_attempts=3
+        attempt=1
+        while [ $attempt -le $max_attempts ]; do
+          echo "Push attempt $attempt of $max_attempts"
+          if git push; then
+            echo "Push successful"
+            break
+          else
+            echo "Push failed, cleaning and retrying..."
+            git clean -fd
+            git reset --hard HEAD
+            git pull --rebase
+            ((attempt++))
+            if [ $attempt -gt $max_attempts ]; then
+              echo "Failed to push after $max_attempts attempts"
+              exit 1
+            fi
+            sleep 5
+          fi
+        done
 
     - name: Add PR Comment
       if: steps.versions.outputs.version_changes != ''
@@ -403,6 +447,10 @@ jobs:
         # Configure Git
         git config --local user.email "${{ env.GIT_USER_EMAIL }}"
         git config --local user.name "${{ env.GIT_USER_NAME }}"
+        
+        # Clean state before creating tags
+        git clean -fd
+        git reset --hard HEAD
 
         # Process each version change
         echo '${{ steps.versions.outputs.version_changes }}' | tr ';' '\n' | while read -r change; do
@@ -412,8 +460,26 @@ jobs:
             tag_name="Library${library}/v${new_version}"
             
             echo "Creating tag $tag_name"
-            git tag -a "$tag_name" -m "Release Library${library} version ${new_version}"
-            git push origin "$tag_name"
+            # Try to create and push tag with retries
+            max_attempts=3
+            attempt=1
+            while [ $attempt -le $max_attempts ]; do
+              echo "Tag push attempt $attempt of $max_attempts"
+              if git tag -a "$tag_name" -m "Release Library${library} version ${new_version}" && git push origin "$tag_name"; then
+                echo "Tag push successful"
+                break
+              else
+                echo "Tag push failed, cleaning and retrying..."
+                git tag -d "$tag_name" || true
+                git fetch --prune --unshallow --tags
+                ((attempt++))
+                if [ $attempt -gt $max_attempts ]; then
+                  echo "Failed to push tag after $max_attempts attempts"
+                  exit 1
+                fi
+                sleep 5
+              fi
+            done
           fi
         done
 
