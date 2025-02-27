@@ -410,6 +410,14 @@ jobs:
       env:
         NUGET_AUTH_TOKEN: ${{ steps.generate-token.outputs.token }}
 
+    - name: Configure NuGet Source
+      shell: bash
+      run: |
+        dotnet nuget add source --name "GitHub" ${{ env.GITHUB_PACKAGES_URL }} \
+          --username ${{ github.repository_owner }} \
+          --password ${{ steps.generate-token.outputs.token }} \
+          --store-password-in-clear-text
+
     - name: Build and Pack NuGet Packages
       shell: bash
       run: |
@@ -455,7 +463,10 @@ jobs:
         for pkg in ${{ env.OUTPUT_DIR }}/*.nupkg; do
           if [ -f "$pkg" ]; then
             echo "Publishing $pkg"
-            dotnet nuget push "$pkg" --skip-duplicate --api-key ${{ steps.generate-token.outputs.token }} --source ${{ env.GITHUB_PACKAGES_URL }}
+            dotnet nuget push "$pkg" \
+              --api-key ${{ steps.generate-token.outputs.token }} \
+              --source "GitHub" \
+              --skip-duplicate
           fi
         done
 
