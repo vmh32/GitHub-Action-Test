@@ -29,7 +29,11 @@ jobs:
 
     - name: Print Changed Libraries
       run: |
-        changed_libs=(${{ steps.filter.outputs.changes }})
-        for lib in ${changed_libs[@]}; do
-          echo "Library changed: $lib"
-        done 
+        if [ -z "${{ steps.filter.outputs.changes }}" ]; then
+          echo "No libraries were changed"
+        else
+          changed_libs=(${{ steps.filter.outputs.changes }})
+          for lib in ${changed_libs[@]}; do
+            echo "Library changed: $lib"
+          done
+        fi 
