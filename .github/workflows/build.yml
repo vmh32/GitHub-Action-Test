@@ -20,11 +20,11 @@ jobs:
       uses: dorny/paths-filter@v3
       with:
         filters: |
-          "A|LibraryA/LibraryA.csproj|B,C":
+          "A:LibraryA/LibraryA.csproj:B,C":
             - 'LibraryA/**'
-          "B|LibraryB/LibraryB.csproj|C":
+          "B:LibraryB/LibraryB.csproj:C":
             - 'LibraryB/**'
-          "C|LibraryC/LibraryC.csproj|":
+          "C:LibraryC/LibraryC.csproj:":
             - 'LibraryC/**'
 
     - name: Print Changed Libraries
@@ -35,7 +35,7 @@ jobs:
         else
           # Remove brackets and quotes, then process
           filtered_changes=$(echo "$changes" | sed 's/^\[\|\]$//g' | sed 's/"//g')
-          echo "$filtered_changes" | while IFS='|' read -r key path deps; do
+          echo "$filtered_changes" | while IFS=':' read -r key path deps; do
             echo "Library changed: $key (path: $path, dependencies: ${deps:-none})"
           done
         fi 
