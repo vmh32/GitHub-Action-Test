@@ -26,6 +26,8 @@ jobs:
             - 'LibraryB/**'
           "C:LibraryC/LibraryC.csproj:":
             - 'LibraryC/**'
+          "D:LibraryD/LibraryD.nuspec:B":
+            - 'LibraryD/**'
 
     - name: Order Dependencies
       id: order
@@ -99,6 +101,99 @@ jobs:
         
         # Output the ordered array
         print(f"::set-output name=ordered_changes::[{','.join(ordered_items)}]")
+        EOF
+
+    - name: Update Versions
+      id: versions
+      run: |
+        python3 - << 'EOF'
+        import xml.etree.ElementTree as ET
+        import re
+        import subprocess
+        import sys
+
+        def get_commit_messages():
+            result = subprocess.run(['git', 'log', '--format=%B'], capture_output=True, text=True)
+            return result.stdout
+
+        def parse_version(version_str):
+            match = re.match(r'(\d+)\.(\d+)\.(\d+)', version_str)
+            if not match:
+                return (0, 0, 0)
+            return tuple(map(int, match.groups()))
+
+        def get_version_from_file(file_path):
+            if file_path.endswith('.csproj'):
+                tree = ET.parse(file_path)
+                version_elem = tree.find(".//Version")
+                return version_elem.text if version_elem is not None else "1.0.0"
+            elif file_path.endswith('.nuspec'):
+                tree = ET.parse(file_path)
+                ns = {'ns': 'http://schemas.microsoft.com/packaging/2010/07/nuspec.xsd'}
+                version_elem = tree.find(".//ns:version", ns)
+                return version_elem.text if version_elem is not None else "1.0.0"
+            return "1.0.0"
+
+        def update_version_in_file(file_path, new_version):
+            if file_path.endswith('.csproj'):
+                tree = ET.parse(file_path)
+                version_elem = tree.find(".//Version")
+                if version_elem is not None:
+                    version_elem.text = new_version
+                tree.write(file_path, encoding='utf-8', xml_declaration=True)
+            elif file_path.endswith('.nuspec'):
+                tree = ET.parse(file_path)
+                ns = {'ns': 'http://schemas.microsoft.com/packaging/2010/07/nuspec.xsd'}
+                version_elem = tree.find(".//ns:version", ns)
+                if version_elem is not None:
+                    version_elem.text = new_version
+                tree.write(file_path, encoding='utf-8', xml_declaration=True)
+
+        def calculate_new_version(current_version, key):
+            major, minor, patch = parse_version(current_version)
+            commit_messages = get_commit_messages()
+            
+            # Check for version change indicators in commit messages
+            if f'[BREAKING_CHANGE:{key}]' in commit_messages:
+                return f"{major + 1}.0.0"
+            elif f'[NEW_FEATURE:{key}]' in commit_messages:
+                return f"{major}.{minor + 1}.0"
+            else:
+                return f"{major}.{minor}.{patch + 1}"
+
+        # Process the changes
+        changes = '${{ steps.order.outputs.ordered_changes }}'
+        if changes == '[]':
+            sys.exit(0)
+
+        # Remove brackets and split into items
+        items = [item.strip() for item in changes.strip('[]').split(',')]
+        
+        version_changes = []
+        for item in items:
+            parts = item.strip('"').split(':')
+            key = parts[0]
+            file_path = parts[1]
+            
+            # Get current version
+            current_version = get_version_from_file(file_path)
+            
+            # Calculate new version
+            new_version = calculate_new_version(current_version, key)
+            
+            # Update version in file
+            update_version_in_file(file_path, new_version)
+            
+            # Store the change for summary
+            version_changes.append(f"{key}: {current_version} -> {new_version}")
+
+        # Print summary
+        print("Version changes summary:")
+        for change in version_changes:
+            print(change)
+        
+        # Set output for future steps
+        print("::set-output name=version_changes::{}".format(';'.join(version_changes)))
         EOF
 
     - name: Print Changed Libraries
