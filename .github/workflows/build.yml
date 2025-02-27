@@ -167,6 +167,9 @@ jobs:
         import os
         import glob
 
+        # Register the namespace to avoid ns0 prefix
+        ET.register_namespace('', 'http://schemas.microsoft.com/packaging/2010/07/nuspec.xsd')
+
         def parse_version(version_str):
             match = re.match(r'(\d+)\.(\d+)\.(\d+)', version_str)
             if not match:
@@ -198,6 +201,7 @@ jobs:
                 version_elem = tree.find(".//ns:version", ns)
                 if version_elem is not None:
                     version_elem.text = new_version
+                # Use default namespace for writing
                 tree.write(file_path, encoding='utf-8', xml_declaration=True)
 
         def update_dependency_version(file_path, dep_key, new_version):
