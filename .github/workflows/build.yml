@@ -1,0 +1,35 @@
+name: Build and Package
+
+on:
+  push:
+    branches: [ main ]
+  pull_request:
+    branches: [ main ]
+
+jobs:
+  detect-and-build:
+    runs-on: ubuntu-latest
+    
+    steps:
+    - uses: actions/checkout@v4
+      with:
+        fetch-depth: 0
+
+    - name: Detect Changed Packages
+      id: filter
+      uses: dorny/paths-filter@v3
+      with:
+        filters: |
+          libraryA:
+            - 'LibraryA/**'
+          libraryB:
+            - 'LibraryB/**'
+          libraryC:
+            - 'LibraryC/**'
+
+    - name: Print Changed Libraries
+      run: |
+        changed_libs=(${{ steps.filter.outputs.changes }})
+        for lib in ${changed_libs[@]}; do
+          echo "Library changed: $lib"
+        done 
