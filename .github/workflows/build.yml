@@ -29,11 +29,19 @@ jobs:
 
     - name: Print Changed Libraries
       run: |
-        if [ -z "${{ steps.filter.outputs.changes }}" ]; then
+        changes="${{ steps.filter.outputs.changes }}"
+        if [ "$changes" = "[]" ]; then
           echo "No libraries were changed"
         else
-          changed_libs=(${{ steps.filter.outputs.changes }})
-          for lib in ${changed_libs[@]}; do
-            echo "Library changed: $lib"
-          done
+          # Remove the square brackets and split into array
+          changes="${changes#[}"
+          changes="${changes%]}"
+          if [ -z "$changes" ]; then
+            echo "No libraries were changed"
+          else
+            changed_libs=($changes)
+            for lib in "${changed_libs[@]}"; do
+              echo "Library changed: $lib"
+            done
+          fi
         fi 
