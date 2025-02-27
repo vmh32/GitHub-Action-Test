@@ -480,7 +480,7 @@ jobs:
       shell: bash
       run: |
         # Install required packages
-        pip install PyJWT cryptography
+        pip install PyJWT cryptography requests
         
         # Create Python script for JWT generation
         cat > generate_jwt.py << 'EOF'
