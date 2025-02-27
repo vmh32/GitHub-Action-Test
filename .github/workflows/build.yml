@@ -36,27 +36,19 @@ jobs:
           # Remove outer brackets and quotes
           filtered_changes=$(echo "$changes" | sed 's/^\[\|\]$//g' | sed 's/"//g')
           
-          # Create a temporary file to store processed items
-          temp_file=$(mktemp)
-          
-          # Process each item and store in temp file
+          # Process each item
           echo "$filtered_changes" | tr ',' '\n' | while read -r item; do
             # Trim leading/trailing whitespace
             item=$(echo "$item" | sed 's/^[[:space:]]*//;s/[[:space:]]*$//')
             if [ ! -z "$item" ]; then
-              # Split the item into parts
+              # Extract each part using exact positions
               key=$(echo "$item" | cut -d':' -f1)
               path=$(echo "$item" | cut -d':' -f2)
               deps=$(echo "$item" | cut -d':' -f3)
-              echo "$key|$path|${deps:-none}" >> "$temp_file"
+              # Only output if we have a valid key
+              if [ ! -z "$key" ]; then
+                echo "Library changed: $key (path: $path, dependencies: ${deps:-none})"
+              fi
             fi
           done
-          
-          # Sort and remove duplicates, then display
-          sort -u "$temp_file" | while IFS='|' read -r key path deps; do
-            echo "Library changed: $key (path: $path, dependencies: $deps)"
-          done
-          
-          # Clean up
-          rm -f "$temp_file"
         fi 
