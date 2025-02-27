@@ -477,33 +477,63 @@ jobs:
         done
 
     - name: Publish NuGet Packages
-      shell: bash
+      shell: pwsh
       run: |
-        # Install jq for JSON parsing
-        choco install jq -y
+        # Install required modules
+        Install-Module -Name PSPKI -Force -SkipPublisherCheck
         
-        # Get installation access token
-        INSTALL_TOKEN=$(curl -X POST \
-          -H "Authorization: Bearer ${{ steps.generate-token.outputs.token }}" \
-          -H "Accept: application/vnd.github.v3+json" \
-          "https://api.github.com/app/installations/${{ env.GITHUB_APP_INSTALLATION_ID }}/access_tokens" \
-          | jq -r .token)
-
-        echo "=== Current NuGet sources ==="
+        # Generate JWT
+        $now = [DateTimeOffset]::UtcNow
+        $payload = @{
+          iat = [int]($now.AddSeconds(-60)).ToUnixTimeSeconds()
+          exp = [int]($now.AddMinutes(10)).ToUnixTimeSeconds()
+          iss = "${{ env.GITHUB_APP_ID }}"
+        } | ConvertTo-Json
+        
+        # Convert private key from base64 and create RSA object
+        $privateKeyBytes = [System.Convert]::FromBase64String("${{ env.GITHUB_APP_PRIVATE_KEY }}")
+        $rsa = [System.Security.Cryptography.RSA]::Create()
+        $rsa.ImportFromPem([System.Text.Encoding]::UTF8.GetString($privateKeyBytes))
+        
+        # Create JWT header
+        $header = @{
+          alg = "RS256"
+          typ = "JWT"
+        } | ConvertTo-Json
+        
+        # Encode header and payload
+        $encodedHeader = [Convert]::ToBase64String([System.Text.Encoding]::UTF8.GetBytes($header)).TrimEnd('=').Replace('+', '-').Replace('/', '_')
+        $encodedPayload = [Convert]::ToBase64String([System.Text.Encoding]::UTF8.GetBytes($payload)).TrimEnd('=').Replace('+', '-').Replace('/', '_')
+        
+        # Create signature
+        $dataToSign = [System.Text.Encoding]::UTF8.GetBytes("$encodedHeader.$encodedPayload")
+        $signature = $rsa.SignData($dataToSign, [System.Security.Cryptography.HashAlgorithmName]::SHA256, [System.Security.Cryptography.RSASignaturePadding]::Pkcs1)
+        $encodedSignature = [Convert]::ToBase64String($signature).TrimEnd('=').Replace('+', '-').Replace('/', '_')
+        
+        # Combine to form JWT
+        $jwt = "$encodedHeader.$encodedPayload.$encodedSignature"
+        
+        # Get installation token using JWT
+        $installToken = (Invoke-RestMethod -Uri "https://api.github.com/app/installations/${{ env.GITHUB_APP_INSTALLATION_ID }}/access_tokens" `
+          -Method Post `
+          -Headers @{
+            "Authorization" = "Bearer $jwt"
+            "Accept" = "application/vnd.github.v3+json"
+          }).token
+        
+        Write-Host "=== Current NuGet sources ==="
         dotnet nuget list source
         
-        for pkg in ${{ env.OUTPUT_DIR }}/*.nupkg; do
-          if [ -f "$pkg" ]; then
-            echo "Publishing $pkg to ${{ env.GITHUB_PACKAGES_URL }}"
-            dotnet nuget push "$pkg" \
-              --api-key "$INSTALL_TOKEN" \
-              --source "${{ env.GITHUB_PACKAGES_URL }}" \
-              --skip-duplicate \
-              --no-symbols
-          fi
-        done
+        # Publish packages
+        Get-ChildItem "${{ env.OUTPUT_DIR }}/*.nupkg" | ForEach-Object {
+          Write-Host "Publishing $($_.Name) to ${{ env.GITHUB_PACKAGES_URL }}"
+          dotnet nuget push $_.FullName `
+            --api-key $installToken `
+            --source "${{ env.GITHUB_PACKAGES_URL }}" `
+            --skip-duplicate `
+            --no-symbols
+        }
       env:
-        NUGET_AUTH_TOKEN: ${{ steps.generate-token.outputs.token }}
         DOTNET_SYSTEM_NET_HTTP_USESOCKETSHTTPHANDLER: 0
 
     - name: Create Git Tags
