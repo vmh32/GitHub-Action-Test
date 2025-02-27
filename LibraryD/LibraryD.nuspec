@@ -1,16 +1,16 @@
-<?xml version="1.0" encoding="utf-8"?>
-<package xmlns="http://schemas.microsoft.com/packaging/2010/07/nuspec.xsd">
-    <metadata>
-        <id>LibraryD</id>
-        <version>1.0.0</version>
-        <title>LibraryD</title>
-        <authors>Your Name</authors>
-        <description>Description of LibraryD</description>
-        <dependencies>
-            <dependency id="LibraryB" version="1.0.0" />
-        </dependencies>
-    </metadata>
-    <files>
-        <file src="bin\Release\**\*.*" target="lib" />
-    </files>
-</package> 
+<?xml version='1.0' encoding='utf-8'?>
+<ns0:package xmlns:ns0="http://schemas.microsoft.com/packaging/2010/07/nuspec.xsd">
+    <ns0:metadata>
+        <ns0:id>LibraryD</ns0:id>
+        <ns0:version>1.0.1</ns0:version>
+        <ns0:title>LibraryD</ns0:title>
+        <ns0:authors>Your Name</ns0:authors>
+        <ns0:description>Description of LibraryD</ns0:description>
+        <ns0:dependencies>
+            <ns0:dependency id="LibraryB" version="1.0.0" />
+        </ns0:dependencies>
+    </ns0:metadata>
+    <ns0:files>
+        <ns0:file src="bin\Release\**\*.*" target="lib" />
+    </ns0:files>
+</ns0:package>
