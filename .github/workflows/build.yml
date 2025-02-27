@@ -413,6 +413,9 @@ jobs:
     - name: Configure NuGet Source
       shell: pwsh
       run: |
+        Write-Host "=== Before removing sources ==="
+        dotnet nuget list source
+        
         # List and remove all existing GitHub sources
         $sources = dotnet nuget list source
         $sources | Where-Object { $_ -match "Github.*" } | ForEach-Object {
@@ -421,11 +424,15 @@ jobs:
             dotnet nuget remove source $sourceName
         }
         
+        Write-Host "=== After removing sources ==="
+        dotnet nuget list source
+        
         # Generate a simple unique name (just a number)
         $sourceName = "GH" + [System.DateTime]::Now.Ticks
         Write-Host "Using source name: $sourceName"
         
         # Add the new source
+        Write-Host "Adding new source..."
         dotnet nuget add source "${{ env.GITHUB_PACKAGES_URL }}" `
           --name "$sourceName" `
           --username "${{ github.repository_owner }}" `
@@ -435,7 +442,7 @@ jobs:
         # Export the source name for use in later steps
         "NUGET_SOURCE_NAME=$sourceName" >> $env:GITHUB_ENV
         
-        # Verify configuration
+        Write-Host "=== Final source configuration ==="
         dotnet nuget list source
 
     - name: Build and Pack NuGet Packages
@@ -480,12 +487,18 @@ jobs:
     - name: Publish NuGet Packages
       shell: bash
       run: |
+        echo "=== Current NuGet sources ==="
+        dotnet nuget list source
+        
+        echo "=== Environment variable check ==="
+        echo "NUGET_SOURCE_NAME=$NUGET_SOURCE_NAME"
+        
         for pkg in ${{ env.OUTPUT_DIR }}/*.nupkg; do
           if [ -f "$pkg" ]; then
-            echo "Publishing $pkg"
+            echo "Publishing $pkg to source $NUGET_SOURCE_NAME"
             dotnet nuget push "$pkg" \
               --api-key ${{ steps.generate-token.outputs.token }} \
-              --source "${{ env.NUGET_SOURCE_NAME }}" \
+              --source "$NUGET_SOURCE_NAME" \
               --skip-duplicate
           fi
         done
