@@ -19,7 +19,7 @@ jobs:
       GITHUB_APP_ID: ${{ secrets.ACTION_TEST_APP_ID }}
       GITHUB_APP_PRIVATE_KEY: ${{ secrets.ACTION_TEST_APP_PRIVATE_KEY }}
       GITHUB_APP_INSTALLATION_ID: ${{ secrets.ACTION_TEST_APP_INSTALLATION_ID }}
-      GITHUB_PACKAGES_URL: https://nuget.pkg.github.com/${{ github.repository_owner }}/${{ github.event.repository.name }}/index.json
+      GITHUB_PACKAGES_URL: https://nuget.pkg.github.com/${{ github.repository_owner }}/index.json
       CONFIGURATION: Release
       PR_BRANCH: ${{ github.head_ref }}
       GIT_USER_EMAIL: "action@github.com"
