@@ -20,11 +20,11 @@ jobs:
       uses: dorny/paths-filter@v3
       with:
         filters: |
-          libraryA:
+          "A|LibraryA/LibraryA.csproj|B,C":
             - 'LibraryA/**'
-          libraryB:
+          "B|LibraryB/LibraryB.csproj|C":
             - 'LibraryB/**'
-          libraryC:
+          "C|LibraryC/LibraryC.csproj|":
             - 'LibraryC/**'
 
     - name: Print Changed Libraries
