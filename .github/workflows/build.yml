@@ -478,9 +478,17 @@ jobs:
 
     - name: Publish NuGet Packages
       shell: bash
-      env:
-        NUGET_AUTH_TOKEN: ${{ steps.generate-token.outputs.token }}
       run: |
+        # Install jq for JSON parsing
+        choco install jq -y
+        
+        # Get installation access token
+        INSTALL_TOKEN=$(curl -X POST \
+          -H "Authorization: Bearer ${{ steps.generate-token.outputs.token }}" \
+          -H "Accept: application/vnd.github.v3+json" \
+          "https://api.github.com/app/installations/${{ env.GITHUB_APP_INSTALLATION_ID }}/access_tokens" \
+          | jq -r .token)
+
         echo "=== Current NuGet sources ==="
         dotnet nuget list source
         
@@ -488,11 +496,15 @@ jobs:
           if [ -f "$pkg" ]; then
             echo "Publishing $pkg to ${{ env.GITHUB_PACKAGES_URL }}"
             dotnet nuget push "$pkg" \
-              --api-key "$NUGET_AUTH_TOKEN" \
+              --api-key "$INSTALL_TOKEN" \
               --source "${{ env.GITHUB_PACKAGES_URL }}" \
-              --skip-duplicate
+              --skip-duplicate \
+              --no-symbols
           fi
         done
+      env:
+        NUGET_AUTH_TOKEN: ${{ steps.generate-token.outputs.token }}
+        DOTNET_SYSTEM_NET_HTTP_USESOCKETSHTTPHANDLER: 0
 
     - name: Create Git Tags
       if: steps.versions.outputs.version_changes != ''
