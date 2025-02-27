@@ -516,9 +516,6 @@ jobs:
             'Authorization': f'Bearer {encoded_jwt}',
             'Accept': 'application/vnd.github.v3+json'
         }
-        print("Requesting installation token...")
-        print(f"App ID: {app_id}")
-        print(f"Installation ID: {installation_id}")
         response = requests.post(
             f'https://api.github.com/app/installations/{installation_id}/access_tokens',
             headers=headers
@@ -526,9 +523,8 @@ jobs:
         
         if response.status_code == 201:
             token = response.json()['token']
-            print("Successfully obtained installation token")
-            print(f"Token permissions: {response.json().get('permissions', {})}")
-            print(token)
+            # Print only the token without any additional output
+            print(token, end='')
         else:
             print(f"Error: {response.status_code} - {response.text}", file=sys.stderr)
             sys.exit(1)
@@ -537,7 +533,7 @@ jobs:
         # Make script executable
         chmod +x generate_jwt.py
         
-        # Get installation token
+        # Get installation token (capture only the token, no extra output)
         echo "Getting installation token..."
         INSTALL_TOKEN=$(python3 generate_jwt.py)
         
