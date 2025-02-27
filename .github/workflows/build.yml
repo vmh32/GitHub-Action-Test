@@ -413,6 +413,10 @@ jobs:
     - name: Configure NuGet Source
       shell: bash
       run: |
+        # Remove existing source if it exists
+        dotnet nuget remove source "GitHub" || true
+        
+        # Add the source
         dotnet nuget add source --name "GitHub" ${{ env.GITHUB_PACKAGES_URL }} \
           --username ${{ github.repository_owner }} \
           --password ${{ steps.generate-token.outputs.token }} \
