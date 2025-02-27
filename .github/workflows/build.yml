@@ -33,9 +33,15 @@ jobs:
         if [ "$changes" = "[]" ]; then
           echo "No libraries were changed"
         else
-          # Remove brackets and quotes, then process
+          # Remove outer brackets and quotes
           filtered_changes=$(echo "$changes" | sed 's/^\[\|\]$//g' | sed 's/"//g')
-          echo "$filtered_changes" | while IFS=':' read -r key path deps; do
-            echo "Library changed: $key (path: $path, dependencies: ${deps:-none})"
+          # Split by comma and process each item
+          echo "$filtered_changes" | tr ',' '\n' | while read -r item; do
+            # Trim leading/trailing whitespace
+            item=$(echo "$item" | sed 's/^[[:space:]]*//;s/[[:space:]]*$//')
+            if [ ! -z "$item" ]; then
+              IFS=':' read -r key path deps <<< "$item"
+              echo "Library changed: $key (path: $path, dependencies: ${deps:-none})"
+            fi
           done
         fi 
