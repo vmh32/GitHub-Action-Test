@@ -19,7 +19,7 @@ jobs:
       GITHUB_APP_ID: ${{ secrets.ACTION_TEST_APP_ID }}
       GITHUB_APP_PRIVATE_KEY: ${{ secrets.ACTION_TEST_APP_PRIVATE_KEY }}
       GITHUB_APP_INSTALLATION_ID: ${{ secrets.ACTION_TEST_APP_INSTALLATION_ID }}
-      GITHUB_PACKAGES_URL: https://nuget.pkg.github.com/${{ github.repository_owner }}/index.json
+      GITHUB_PACKAGES_URL: https://nuget.pkg.github.com/${{ github.repository_owner }}/${{ github.event.repository.name }}/index.json
       CONFIGURATION: Release
       PR_BRANCH: ${{ github.head_ref }}
       GIT_USER_EMAIL: "action@github.com"
@@ -500,7 +500,12 @@ jobs:
         payload = {
             'iat': int(time.time()) - 60,  # issued 60 seconds ago
             'exp': int(time.time()) + 600,  # expires in 10 minutes
-            'iss': app_id
+            'iss': app_id,
+            'repositories': ['*'],
+            'permissions': {
+                'packages': 'write',
+                'contents': 'write'
+            }
         }
         
         # Create JWT
@@ -511,13 +516,19 @@ jobs:
             'Authorization': f'Bearer {encoded_jwt}',
             'Accept': 'application/vnd.github.v3+json'
         }
+        print("Requesting installation token...")
+        print(f"App ID: {app_id}")
+        print(f"Installation ID: {installation_id}")
         response = requests.post(
             f'https://api.github.com/app/installations/{installation_id}/access_tokens',
             headers=headers
         )
         
         if response.status_code == 201:
-            print(response.json()['token'])
+            token = response.json()['token']
+            print("Successfully obtained installation token")
+            print(f"Token permissions: {response.json().get('permissions', {})}")
+            print(token)
         else:
             print(f"Error: {response.status_code} - {response.text}", file=sys.stderr)
             sys.exit(1)
