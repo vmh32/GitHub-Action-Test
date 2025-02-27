@@ -19,6 +19,7 @@ jobs:
       PR_BRANCH: ${{ github.head_ref }}
       GIT_USER_EMAIL: "action@github.com"
       GIT_USER_NAME: "GitHub Action"
+      GITHUB_PACKAGES_URL: https://nuget.pkg.github.com/${{ github.repository_owner }}/index.json
 
     steps:
     - uses: actions/checkout@v4
@@ -386,9 +387,10 @@ jobs:
       id: generate-token
       uses: actions/create-github-app-token@v1
       with:
-        app-id: ${{ env.GITHUB_APP_ID }}
-        private-key: ${{ env.GITHUB_APP_PRIVATE_KEY }}
-        installation-id: ${{ env.GITHUB_APP_INSTALLATION_ID }}
+        app_id: ${{ secrets.ACTION_TEST_APP_ID }}
+        private_key: ${{ secrets.ACTION_TEST_APP_PRIVATE_KEY }}
+        owner: ${{ github.repository_owner }}
+        repositories: ${{ github.event.repository.name }}
 
     - name: Setup .NET
       uses: actions/setup-dotnet@v4
@@ -544,9 +546,6 @@ jobs:
       packages: write
     env:
       DOTNET_VERSION: '8.0.x'
-      GITHUB_APP_ID: ${{ secrets.ACTION_TEST_APP_ID }}
-      GITHUB_APP_PRIVATE_KEY: ${{ secrets.ACTION_TEST_APP_PRIVATE_KEY }}
-      GITHUB_APP_INSTALLATION_ID: ${{ secrets.ACTION_TEST_APP_INSTALLATION_ID }}
       GITHUB_PACKAGES_URL: https://nuget.pkg.github.com/${{ github.repository_owner }}/index.json
       CONFIGURATION: Release
       PR_BRANCH: ${{ github.head_ref }}
@@ -557,6 +556,15 @@ jobs:
       with:
         ref: ${{ env.PR_BRANCH }}
 
+    - name: Generate GitHub App Token
+      id: generate-token
+      uses: actions/create-github-app-token@v1
+      with:
+        app_id: ${{ secrets.ACTION_TEST_APP_ID }}
+        private_key: ${{ secrets.ACTION_TEST_APP_PRIVATE_KEY }}
+        owner: ${{ github.repository_owner }}
+        repositories: ${{ github.event.repository.name }}
+
     - name: Setup .NET
       uses: actions/setup-dotnet@v4
       with:
@@ -564,14 +572,6 @@ jobs:
         source-url: ${{ env.GITHUB_PACKAGES_URL }}
       env:
         NUGET_AUTH_TOKEN: ${{ steps.generate-token.outputs.token }}
-
-    - name: Generate GitHub App Token
-      id: generate-token
-      uses: actions/create-github-app-token@v1
-      with:
-        app-id: ${{ env.GITHUB_APP_ID }}
-        private-key: ${{ env.GITHUB_APP_PRIVATE_KEY }}
-        installation-id: ${{ env.GITHUB_APP_INSTALLATION_ID }}
 
     - name: Build and Pack NuGet Packages
       run: |
