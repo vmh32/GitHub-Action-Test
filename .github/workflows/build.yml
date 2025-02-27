@@ -33,15 +33,16 @@ jobs:
         if [ "$changes" = "[]" ]; then
           echo "No libraries were changed"
         else
-          # Remove the square brackets and split into array
+          # Remove outer brackets and handle each item
           changes="${changes#[}"
           changes="${changes%]}"
-          if [ -z "$changes" ]; then
-            echo "No libraries were changed"
-          else
-            changed_libs=($changes)
-            for lib in "${changed_libs[@]}"; do
-              echo "Library changed: $lib"
-            done
-          fi
+          # Read into array handling quotes properly
+          readarray -d ' ' -t changed_libs < <(echo "$changes" | tr -d '"')
+          for lib in "${changed_libs[@]}"; do
+            # Extract just the key (part before first pipe)
+            key=$(echo "$lib" | cut -d'|' -f1)
+            path=$(echo "$lib" | cut -d'|' -f2)
+            deps=$(echo "$lib" | cut -d'|' -f3)
+            echo "Library changed: $key (path: $path, dependencies: $deps)"
+          done
         fi 
