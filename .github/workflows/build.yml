@@ -413,14 +413,22 @@ jobs:
     - name: Configure NuGet Source
       shell: bash
       run: |
-        # Remove existing source if it exists
-        dotnet nuget remove source "GitHub" || true
+        # Generate a unique source name using timestamp and random string
+        SOURCE_NAME="Github_$(date +%s)_$(openssl rand -hex 4)"
+        echo "Using unique source name: $SOURCE_NAME"
         
-        # Add the source
-        dotnet nuget add source --name "GitHub" ${{ env.GITHUB_PACKAGES_URL }} \
+        # Add the source with the unique name
+        dotnet nuget add source ${{ env.GITHUB_PACKAGES_URL }} \
+          --name "$SOURCE_NAME" \
           --username ${{ github.repository_owner }} \
           --password ${{ steps.generate-token.outputs.token }} \
           --store-password-in-clear-text
+        
+        # Export the source name for use in later steps
+        echo "NUGET_SOURCE_NAME=$SOURCE_NAME" >> $GITHUB_ENV
+        
+        # Show configured sources
+        dotnet nuget list source
 
     - name: Build and Pack NuGet Packages
       shell: bash
@@ -469,7 +477,7 @@ jobs:
             echo "Publishing $pkg"
             dotnet nuget push "$pkg" \
               --api-key ${{ steps.generate-token.outputs.token }} \
-              --source "GitHub" \
+              --source "${{ env.NUGET_SOURCE_NAME }}" \
               --skip-duplicate
           fi
         done
