@@ -411,23 +411,31 @@ jobs:
         NUGET_AUTH_TOKEN: ${{ steps.generate-token.outputs.token }}
 
     - name: Configure NuGet Source
-      shell: bash
+      shell: pwsh
       run: |
-        # Generate a unique source name using timestamp and random string
-        SOURCE_NAME="Github_$(date +%s)_$(openssl rand -hex 4)"
-        echo "Using unique source name: $SOURCE_NAME"
+        # List and remove all existing GitHub sources
+        $sources = dotnet nuget list source
+        $sources | Where-Object { $_ -match "Github.*" } | ForEach-Object {
+            $sourceName = $_.Trim()
+            Write-Host "Removing source: $sourceName"
+            dotnet nuget remove source $sourceName
+        }
         
-        # Add the source with the unique name
-        dotnet nuget add source ${{ env.GITHUB_PACKAGES_URL }} \
-          --name "$SOURCE_NAME" \
-          --username ${{ github.repository_owner }} \
-          --password ${{ steps.generate-token.outputs.token }} \
+        # Generate a simple unique name (just a number)
+        $sourceName = "GH" + [System.DateTime]::Now.Ticks
+        Write-Host "Using source name: $sourceName"
+        
+        # Add the new source
+        dotnet nuget add source "${{ env.GITHUB_PACKAGES_URL }}" `
+          --name "$sourceName" `
+          --username "${{ github.repository_owner }}" `
+          --password "${{ steps.generate-token.outputs.token }}" `
           --store-password-in-clear-text
         
         # Export the source name for use in later steps
-        echo "NUGET_SOURCE_NAME=$SOURCE_NAME" >> $GITHUB_ENV
+        "NUGET_SOURCE_NAME=$sourceName" >> $env:GITHUB_ENV
         
-        # Show configured sources
+        # Verify configuration
         dotnet nuget list source
 
     - name: Build and Pack NuGet Packages
