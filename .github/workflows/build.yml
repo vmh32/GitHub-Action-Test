@@ -20,7 +20,7 @@ jobs:
       uses: dorny/paths-filter@v3
       with:
         filters: |
-          "A:LibraryA/LibraryA.csproj:B&C":
+          "A:LibraryA/LibraryA.csproj:B+C":
             - 'LibraryA/**'
           "B:LibraryB/LibraryB.csproj:C":
             - 'LibraryB/**'
