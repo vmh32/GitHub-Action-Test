@@ -4,16 +4,32 @@ on:
   push:
     branches: [ main ]
   pull_request:
+    types: [opened, reopened, synchronize]
     branches: [ main ]
 
 jobs:
   detect-and-build:
+    # Check if the branch name matches Release.#.#.#
+    if: startsWith(github.head_ref, 'Release.')
     runs-on: ubuntu-latest
+    permissions:
+      contents: write
+      pull-requests: write
     
     steps:
     - uses: actions/checkout@v4
       with:
         fetch-depth: 0
+        ref: ${{ github.head_ref }}
+
+    - name: Validate Branch Name
+      id: validate
+      run: |
+        branch="${{ github.head_ref }}"
+        if ! [[ $branch =~ ^Release\.[0-9]+\.[0-9]+\.[0-9]+$ ]]; then
+          echo "Branch name must follow format Release.#.#.#"
+          exit 1
+        fi
 
     - name: Detect Changed Packages
       id: filter
@@ -106,19 +122,29 @@ jobs:
             f.write(f'ordered_changes=[{",".join(ordered_items)}]')
         EOF
 
+    - name: Get PR Comments
+      id: pr_comment
+      uses: actions/github-script@v7
+      with:
+        script: |
+          const { data: comments } = await github.rest.issues.listComments({
+            owner: context.repo.owner,
+            repo: context.repo.repo,
+            issue_number: context.issue.number
+          });
+          const prBody = context.payload.pull_request.body || '';
+          const allText = [prBody, ...comments.map(c => c.body)].join('\n');
+          return allText;
+        result-encoding: string
+
     - name: Update Versions
       id: versions
       run: |
         python3 - << 'EOF'
         import xml.etree.ElementTree as ET
         import re
-        import subprocess
         import sys
         import os
-
-        def get_commit_messages():
-            result = subprocess.run(['git', 'log', '--format=%B'], capture_output=True, text=True)
-            return result.stdout
 
         def parse_version(version_str):
             match = re.match(r'(\d+)\.(\d+)\.(\d+)', version_str)
@@ -153,20 +179,21 @@ jobs:
                     version_elem.text = new_version
                 tree.write(file_path, encoding='utf-8', xml_declaration=True)
 
-        def calculate_new_version(current_version, key):
+        def calculate_new_version(current_version, key, pr_comments):
             major, minor, patch = parse_version(current_version)
-            commit_messages = get_commit_messages()
             
-            # Check for version change indicators in commit messages
-            if f'[BREAKING_CHANGE:{key}]' in commit_messages:
+            # Check for version change indicators in PR comments
+            if f'[BREAKING_CHANGE:{key}]' in pr_comments:
                 return f"{major + 1}.0.0"
-            elif f'[NEW_FEATURE:{key}]' in commit_messages:
+            elif f'[NEW_FEATURE:{key}]' in pr_comments:
                 return f"{major}.{minor + 1}.0"
             else:
                 return f"{major}.{minor}.{patch + 1}"
 
         # Process the changes
         changes = '${{ steps.order.outputs.ordered_changes }}'
+        pr_comments = '''${{ steps.pr_comment.outputs.result }}'''
+
         if changes == '[]':
             sys.exit(0)
 
@@ -183,7 +210,7 @@ jobs:
             current_version = get_version_from_file(file_path)
             
             # Calculate new version
-            new_version = calculate_new_version(current_version, key)
+            new_version = calculate_new_version(current_version, key, pr_comments)
             
             # Update version in file
             update_version_in_file(file_path, new_version)
@@ -200,6 +227,29 @@ jobs:
         with open(os.environ['GITHUB_OUTPUT'], 'a') as f:
             f.write(f'version_changes={";".join(version_changes)}')
         EOF
+
+    - name: Commit Version Updates
+      if: steps.versions.outputs.version_changes != ''
+      run: |
+        git config --local user.email "action@github.com"
+        git config --local user.name "GitHub Action"
+        git add -A
+        git commit -m "Update versions based on PR analysis [skip ci]" || exit 0
+        git push
+
+    - name: Add PR Comment
+      if: steps.versions.outputs.version_changes != ''
+      uses: actions/github-script@v7
+      with:
+        script: |
+          const changes = '${{ steps.versions.outputs.version_changes }}'.split(';');
+          const body = `## Version Updates\nThe following version changes have been applied:\n\n${changes.map(c => `- ${c}`).join('\n')}`;
+          await github.rest.issues.createComment({
+            owner: context.repo.owner,
+            repo: context.repo.repo,
+            issue_number: context.issue.number,
+            body: body
+          });
 
     - name: Print Changed Libraries
       run: |
