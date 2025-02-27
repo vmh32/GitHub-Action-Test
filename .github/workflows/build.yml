@@ -477,63 +477,77 @@ jobs:
         done
 
     - name: Publish NuGet Packages
-      shell: pwsh
+      shell: bash
       run: |
-        # Install required modules
-        Install-Module -Name PSPKI -Force -SkipPublisherCheck
+        # Install required packages
+        pip install PyJWT cryptography
         
-        # Generate JWT
-        $now = [DateTimeOffset]::UtcNow
-        $payload = @{
-          iat = [int]($now.AddSeconds(-60)).ToUnixTimeSeconds()
-          exp = [int]($now.AddMinutes(10)).ToUnixTimeSeconds()
-          iss = "${{ env.GITHUB_APP_ID }}"
-        } | ConvertTo-Json
+        # Create Python script for JWT generation
+        cat > generate_jwt.py << 'EOF'
+        #!/usr/bin/env python3
+        import sys
+        import time
+        import os
+        import jwt
+        import requests
         
-        # Convert private key from base64 and create RSA object
-        $privateKeyBytes = [System.Convert]::FromBase64String("${{ env.GITHUB_APP_PRIVATE_KEY }}")
-        $rsa = [System.Security.Cryptography.RSA]::Create()
-        $rsa.ImportFromPem([System.Text.Encoding]::UTF8.GetString($privateKeyBytes))
+        # Get the private key from environment
+        private_key = os.environ['GITHUB_APP_PRIVATE_KEY']
+        app_id = os.environ['GITHUB_APP_ID']
+        installation_id = os.environ['GITHUB_APP_INSTALLATION_ID']
         
-        # Create JWT header
-        $header = @{
-          alg = "RS256"
-          typ = "JWT"
-        } | ConvertTo-Json
+        # Create JWT payload
+        payload = {
+            'iat': int(time.time()) - 60,  # issued 60 seconds ago
+            'exp': int(time.time()) + 600,  # expires in 10 minutes
+            'iss': app_id
+        }
         
-        # Encode header and payload
-        $encodedHeader = [Convert]::ToBase64String([System.Text.Encoding]::UTF8.GetBytes($header)).TrimEnd('=').Replace('+', '-').Replace('/', '_')
-        $encodedPayload = [Convert]::ToBase64String([System.Text.Encoding]::UTF8.GetBytes($payload)).TrimEnd('=').Replace('+', '-').Replace('/', '_')
+        # Create JWT
+        encoded_jwt = jwt.encode(payload, private_key, algorithm='RS256')
         
-        # Create signature
-        $dataToSign = [System.Text.Encoding]::UTF8.GetBytes("$encodedHeader.$encodedPayload")
-        $signature = $rsa.SignData($dataToSign, [System.Security.Cryptography.HashAlgorithmName]::SHA256, [System.Security.Cryptography.RSASignaturePadding]::Pkcs1)
-        $encodedSignature = [Convert]::ToBase64String($signature).TrimEnd('=').Replace('+', '-').Replace('/', '_')
+        # Get installation token
+        headers = {
+            'Authorization': f'Bearer {encoded_jwt}',
+            'Accept': 'application/vnd.github.v3+json'
+        }
+        response = requests.post(
+            f'https://api.github.com/app/installations/{installation_id}/access_tokens',
+            headers=headers
+        )
         
-        # Combine to form JWT
-        $jwt = "$encodedHeader.$encodedPayload.$encodedSignature"
+        if response.status_code == 201:
+            print(response.json()['token'])
+        else:
+            print(f"Error: {response.status_code} - {response.text}", file=sys.stderr)
+            sys.exit(1)
+        EOF
         
-        # Get installation token using JWT
-        $installToken = (Invoke-RestMethod -Uri "https://api.github.com/app/installations/${{ env.GITHUB_APP_INSTALLATION_ID }}/access_tokens" `
-          -Method Post `
-          -Headers @{
-            "Authorization" = "Bearer $jwt"
-            "Accept" = "application/vnd.github.v3+json"
-          }).token
+        # Make script executable
+        chmod +x generate_jwt.py
         
-        Write-Host "=== Current NuGet sources ==="
+        # Get installation token
+        echo "Getting installation token..."
+        INSTALL_TOKEN=$(python3 generate_jwt.py)
+        
+        echo "=== Current NuGet sources ==="
         dotnet nuget list source
         
         # Publish packages
-        Get-ChildItem "${{ env.OUTPUT_DIR }}/*.nupkg" | ForEach-Object {
-          Write-Host "Publishing $($_.Name) to ${{ env.GITHUB_PACKAGES_URL }}"
-          dotnet nuget push $_.FullName `
-            --api-key $installToken `
-            --source "${{ env.GITHUB_PACKAGES_URL }}" `
-            --skip-duplicate `
-            --no-symbols
-        }
+        for pkg in ${{ env.OUTPUT_DIR }}/*.nupkg; do
+          if [ -f "$pkg" ]; then
+            echo "Publishing $pkg to ${{ env.GITHUB_PACKAGES_URL }}"
+            dotnet nuget push "$pkg" \
+              --api-key "$INSTALL_TOKEN" \
+              --source "${{ env.GITHUB_PACKAGES_URL }}" \
+              --skip-duplicate \
+              --no-symbols
+          fi
+        done
       env:
+        GITHUB_APP_PRIVATE_KEY: ${{ secrets.ACTION_TEST_APP_PRIVATE_KEY }}
+        GITHUB_APP_ID: ${{ secrets.ACTION_TEST_APP_ID }}
+        GITHUB_APP_INSTALLATION_ID: ${{ secrets.ACTION_TEST_APP_INSTALLATION_ID }}
         DOTNET_SYSTEM_NET_HTTP_USESOCKETSHTTPHANDLER: 0
 
     - name: Create Git Tags
