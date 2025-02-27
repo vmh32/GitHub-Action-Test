@@ -27,9 +27,83 @@ jobs:
           "C:LibraryC/LibraryC.csproj:":
             - 'LibraryC/**'
 
+    - name: Order Dependencies
+      id: order
+      run: |
+        python3 - << 'EOF'
+        import json
+        import sys
+        from collections import defaultdict
+
+        def create_graph(items):
+            graph = defaultdict(list)
+            nodes = set()
+            
+            # Parse the items and build the graph
+            for item in items:
+                parts = item.strip('"').split(':')
+                key = parts[0]
+                deps = parts[2].split('+') if parts[2] else []
+                nodes.add(key)
+                for dep in deps:
+                    if dep:
+                        graph[key].append(dep)
+                        nodes.add(dep)
+            return graph, nodes
+
+        def topological_sort(graph, nodes):
+            # Track visited nodes and detect cycles
+            visited = set()
+            temp = set()
+            order = []
+            
+            def visit(node):
+                if node in temp:
+                    sys.exit(f"Error: Circular dependency detected involving {node}")
+                if node not in visited:
+                    temp.add(node)
+                    for dep in graph[node]:
+                        visit(dep)
+                    temp.remove(node)
+                    visited.add(node)
+                    order.append(node)
+            
+            # Visit each node
+            for node in nodes:
+                if node not in visited:
+                    visit(node)
+            
+            return order
+
+        # Get the changes from GitHub Actions environment
+        changes = '${{ steps.filter.outputs.changes }}'
+        if changes == '[]':
+            print('::set-output name=ordered_changes::[]')
+            sys.exit(0)
+
+        # Remove brackets and split into items
+        items = [item.strip() for item in changes.strip('[]').split(',')]
+        
+        # Create dependency graph
+        graph, nodes = create_graph(items)
+        
+        # Get topological order
+        ordered_keys = topological_sort(graph, nodes)
+        
+        # Filter and reorder the original items based on the topological order
+        ordered_items = []
+        key_to_item = {item.strip('"').split(':')[0]: item for item in items}
+        for key in ordered_keys:
+            if key in key_to_item:
+                ordered_items.append(key_to_item[key])
+        
+        # Output the ordered array
+        print(f"::set-output name=ordered_changes::[{','.join(ordered_items)}]")
+        EOF
+
     - name: Print Changed Libraries
       run: |
-        changes="${{ steps.filter.outputs.changes }}"
+        changes="${{ steps.order.outputs.ordered_changes }}"
         if [ "$changes" = "[]" ]; then
           echo "No libraries were changed"
         else
