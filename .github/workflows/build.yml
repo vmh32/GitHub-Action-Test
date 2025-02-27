@@ -449,7 +449,13 @@ jobs:
               dotnet build "$path" -c ${{ env.CONFIGURATION }}
               dotnet pack "$path" -c ${{ env.CONFIGURATION }} --no-build -o ${{ env.OUTPUT_DIR }}
             elif [[ $path == *.nuspec ]]; then
-              echo "Packing $path using nuget pack"
+              echo "Building and packing $path"
+              # Get directory containing .nuspec file
+              dir=$(dirname "$path")
+              # Build the corresponding .csproj if it exists
+              if [ -f "$dir/$dir.csproj" ]; then
+                dotnet build "$dir/$dir.csproj" -c ${{ env.CONFIGURATION }}
+              fi
               nuget pack "$path" -OutputDirectory ${{ env.OUTPUT_DIR }}
             fi
           fi
