@@ -45,8 +45,8 @@ jobs:
               key=$(echo "$item" | cut -d':' -f1)
               path=$(echo "$item" | cut -d':' -f2)
               deps=$(echo "$item" | cut -d':' -f3)
-              # Extract file extension
-              ext=$(echo "$path" | grep -o '\.[^.]*$' || echo "no extension")
+              # Extract file extension without the dot
+              ext=$(echo "$path" | grep -o '\.[^.]*$' | sed 's/\.//' || echo "no extension")
               # Only output if we have a valid key
               if [ ! -z "$key" ]; then
                 echo "Library changed: $key (path: $path, dependencies: ${deps:-none})"
