@@ -404,6 +404,12 @@ jobs:
       env:
         NUGET_AUTH_TOKEN: ${{ steps.generate-token.outputs.token }}
 
+    - name: Install NuGet
+      if: contains(steps.order.outputs.ordered_changes, '.nuspec')
+      run: |
+        sudo apt-get update
+        sudo apt-get install -y nuget
+
     - name: Build and Pack NuGet Packages
       run: |
         # Process ordered changes
@@ -430,8 +436,8 @@ jobs:
               dotnet build "$path" -c ${{ env.CONFIGURATION }}
               dotnet pack "$path" -c ${{ env.CONFIGURATION }} --no-build -o ${{ env.OUTPUT_DIR }}
             elif [[ $path == *.nuspec ]]; then
-              echo "Packing $path"
-              dotnet pack "$path" -o ${{ env.OUTPUT_DIR }}
+              echo "Packing $path using nuget pack"
+              nuget pack "$path" -OutputDirectory ${{ env.OUTPUT_DIR }}
             fi
           fi
         done
