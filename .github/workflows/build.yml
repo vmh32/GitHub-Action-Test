@@ -372,21 +372,6 @@ jobs:
           fi
         done
 
-    - name: Add PR Comment
-      if: steps.versions.outputs.version_changes != ''
-      uses: actions/github-script@v7
-      with:
-        script: |
-          const changes = '${{ steps.versions.outputs.version_changes }}'.split(';');
-          const body = `## Version Updates\nThe following version changes have been applied:\n\n${changes.map(c => `- ${c}`).join('\n')}`;
-          await github.rest.issues.createComment({
-            owner: context.repo.owner,
-            repo: context.repo.repo,
-            issue_number: context.issue.number,
-            body: body
-          });
-
-
     - name: Setup .NET
       uses: actions/setup-dotnet@v4
       with:
@@ -638,17 +623,17 @@ jobs:
             echo "## Created Tags"
             # List the release tag first
             echo "* \\\`${{ env.PR_BRANCH }}\\\`"
-            # List library tags
+            # List library tags (using sort -u to remove duplicates)
             if [ ! -z "${{ steps.versions.outputs.version_changes }}" ]; then
               echo "${{ steps.versions.outputs.version_changes }}" | tr ';' '\n' | sort -u | while read -r change; do
                 if [ ! -z "$change" ]; then
                   library=$(echo "$change" | grep -o '^[A-Z]')
                   new_version=$(echo "$change" | grep -o '[0-9]\+\.[0-9]\+\.[0-9]\+$')
                   if [ ! -z "$library" ] && [ ! -z "$new_version" ]; then
-                    echo "* \\\`Library${library}/v${new_version}\\\`"
+                    echo "* \\\`Library${library}/v${new_version}\\\`" | sort -u
                   fi
                 fi
-              done
+              done | sort -u
             fi
           } | tee "$output_file"
         fi
