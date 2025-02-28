@@ -31,7 +31,6 @@ jobs:
         fetch-depth: 0
         ref: ${{ env.PR_BRANCH }}
         clean: true
-        force: true
 
     - name: Clean Git State
       shell: bash
