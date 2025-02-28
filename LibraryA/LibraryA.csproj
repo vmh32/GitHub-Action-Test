@@ -8,7 +8,7 @@
     
     
     <PackageId>LibraryA</PackageId>
-    <Version>1.0.34</Version>
+    <Version>1.0.35</Version>
     <Authors>Your Name</Authors>
     <Company>Your Company</Company>
     <Description>Description of LibraryA</Description>
@@ -21,8 +21,8 @@
   </PropertyGroup>
 
   <ItemGroup>
-    <PackageReference Include="LibraryB" Version="1.0.34" />
-    <PackageReference Include="LibraryC" Version="1.0.34" />
+    <PackageReference Include="LibraryB" Version="1.0.35" />
+    <PackageReference Include="LibraryC" Version="1.0.35" />
   </ItemGroup>
 
   <ItemGroup>
