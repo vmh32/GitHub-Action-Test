@@ -410,8 +410,8 @@ jobs:
       with:
         dotnet-version: ${{ env.DOTNET_VERSION }}
         source-url: ${{ env.GITHUB_PACKAGES_URL }}
-      env:
-        NUGET_AUTH_TOKEN: ${{ steps.generate-token.outputs.token }}
+      #env:
+      #  NUGET_AUTH_TOKEN: ${{ steps.generate-token.outputs.token }}
 
     - name: Configure NuGet Source
       shell: pwsh
