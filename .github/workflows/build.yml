@@ -549,12 +549,6 @@ jobs:
               --no-symbols
           fi
         done
-      env:
-        GITHUB_APP_PRIVATE_KEY: ${{ secrets.ACTION_TEST_APP_PRIVATE_KEY }}
-        GITHUB_APP_ID: ${{ secrets.ACTION_TEST_APP_ID }}
-        GITHUB_APP_CLIENT_ID: ${{ secrets.ACTION_TEST_CLIENT_ID }}
-        GITHUB_APP_INSTALLATION_ID: ${{ secrets.ACTION_TEST_APP_INSTALLATION_ID }}
-        DOTNET_SYSTEM_NET_HTTP_USESOCKETSHTTPHANDLER: 0
 
     - name: Create Git Tags
       if: steps.versions.outputs.version_changes != ''
