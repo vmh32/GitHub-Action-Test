@@ -17,10 +17,6 @@ jobs:
     runs-on: windows-latest
     env:
       DOTNET_VERSION: '8.0.x'
-      #GITHUB_APP_ID: ${{ secrets.ACTION_TEST_APP_ID }}
-      #GITHUB_APP_CLIENT_ID: ${{ secrets.ACTION_TEST_CLIENT_ID }}
-      #GITHUB_APP_PRIVATE_KEY: ${{ secrets.ACTION_TEST_APP_PRIVATE_KEY }}
-      #GITHUB_APP_INSTALLATION_ID: ${{ secrets.ACTION_TEST_APP_INSTALLATION_ID }}
       GITHUB_PACKAGES_URL: https://nuget.pkg.github.com/${{ github.repository_owner }}/index.json
       NUGET_AUTH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
       CONFIGURATION: Release
@@ -572,6 +568,7 @@ jobs:
         if [ "$changes" = "[]" ]; then
           echo "No libraries were changed"
         else
+          echo "=== Changed Libraries ==="
           # Remove outer brackets and quotes
           filtered_changes=$(echo "$changes" | sed 's/^\[\|\]$//g' | sed 's/"//g')
           
@@ -594,4 +591,15 @@ jobs:
               fi
             fi
           done
+
+          echo "=== Version Changes ==="
+          if [ ! -z "${{ steps.versions.outputs.version_changes }}" ]; then
+            echo "${{ steps.versions.outputs.version_changes }}" | tr ';' '\n' | while read -r change; do
+              if [ ! -z "$change" ]; then
+                echo "$change"
+              fi
+            done
+          else
+            echo "No version changes detected"
+          fi
         fi  

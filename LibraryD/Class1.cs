@@ -2,7 +2,7 @@ using System;
 
 namespace LibraryD
 {
-    public class Class1
+    public class ClassD
     {
         // 41
     }

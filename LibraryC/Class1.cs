@@ -1,6 +1,6 @@
 ﻿namespace LibraryC
 {
-    public class Class1
+    public class ClassC
     {
         // 41
     }
