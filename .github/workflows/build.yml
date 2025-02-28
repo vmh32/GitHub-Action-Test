@@ -396,14 +396,6 @@ jobs:
             body: body
           });
 
-    # - name: Generate GitHub App Token
-    #   id: generate-token
-    #   uses: actions/create-github-app-token@v1
-    #   with:
-    #     app_id: ${{ secrets.ACTION_TEST_APP_ID }}
-    #     private_key: ${{ secrets.ACTION_TEST_APP_PRIVATE_KEY }}
-    #     owner: ${{ github.repository_owner }}
-    #     repositories: ${{ github.event.repository.name }}
 
     - name: Setup .NET
       uses: actions/setup-dotnet@v4
@@ -466,6 +458,17 @@ jobs:
               echo "Building and packing $path"
               dotnet build "$path" -c ${{ env.CONFIGURATION }}
               dotnet pack "$path" -c ${{ env.CONFIGURATION }} --no-build -o ${{ env.OUTPUT_DIR }}
+              
+              # Get the package name from the most recently created package
+              pkg=$(ls -t ${{ env.OUTPUT_DIR }}/*.nupkg | head -n1)
+              if [ -f "$pkg" ]; then
+                echo "Publishing $pkg to ${{ env.GITHUB_PACKAGES_URL }}"
+                dotnet nuget push "$pkg" \
+                  --api-key "${{ secrets.GITHUB_TOKEN }}" \
+                  --source "${{ env.GITHUB_PACKAGES_URL }}" \
+                  --skip-duplicate \
+                  --no-symbols
+              fi
             elif [[ $path == *.nuspec ]]; then
               echo "Building and packing $path"
               # Get directory containing .nuspec file
@@ -475,82 +478,18 @@ jobs:
                 dotnet build "$dir/$dir.csproj" -c ${{ env.CONFIGURATION }}
               fi
               nuget pack "$path" -OutputDirectory ${{ env.OUTPUT_DIR }}
+              
+              # Get the package name from the most recently created package
+              pkg=$(ls -t ${{ env.OUTPUT_DIR }}/*.nupkg | head -n1)
+              if [ -f "$pkg" ]; then
+                echo "Publishing $pkg to ${{ env.GITHUB_PACKAGES_URL }}"
+                dotnet nuget push "$pkg" \
+                  --api-key "${{ secrets.GITHUB_TOKEN }}" \
+                  --source "${{ env.GITHUB_PACKAGES_URL }}" \
+                  --skip-duplicate \
+                  --no-symbols
+              fi
             fi
-          fi
-        done
-
-    - name: Publish NuGet Packages
-      shell: bash
-      run: |
-        # NOTE: JWT-based authentication is currently disabled in favor of GITHUB_TOKEN for package publishing
-        # Uncomment the following section to use JWT-based authentication instead
-        # # Install required packages
-        # pip install PyJWT cryptography requests
-        # 
-        # # Create Python script for JWT generation
-        # cat > generate_jwt.py << 'EOF'
-        # #!/usr/bin/env python3
-        # import sys
-        # import time
-        # import jwt
-        # import requests
-        # import os
-        # 
-        # # Get the private key from environment
-        # private_key = os.environ['GITHUB_APP_PRIVATE_KEY']
-        # client_id = os.environ['GITHUB_APP_CLIENT_ID']
-        # installation_id = os.environ['GITHUB_APP_INSTALLATION_ID']
-        # 
-        # payload = {
-        #     # Issued at time
-        #     'iat': int(time.time()),
-        #     # JWT expiration time (10 minutes maximum)
-        #     'exp': int(time.time()) + 600,
-        #     # GitHub App's client ID
-        #     'iss': client_id
-        # }
-        # 
-        # # Create JWT
-        # encoded_jwt = jwt.encode(payload, private_key, algorithm='RS256')
-        # 
-        # # Get installation token
-        # headers = {
-        #     'Authorization': f'Bearer {encoded_jwt}',
-        #     'Accept': 'application/vnd.github.v3+json'
-        # }
-        # response = requests.post(
-        #     f'https://api.github.com/app/installations/{installation_id}/access_tokens',
-        #     headers=headers
-        # )
-        # 
-        # if response.status_code == 201:
-        #     token = response.json()['token']
-        #     # Print only the token without any additional output
-        #     print(token, end='')
-        # else:
-        #     print(f"Error: {response.status_code} - {response.text}", file=sys.stderr)
-        #     sys.exit(1)
-        # EOF
-        # 
-        # # Make script executable
-        # chmod +x generate_jwt.py
-        # 
-        # # Get installation token (capture only the token, no extra output)
-        # echo "Getting installation token..."
-        # INSTALL_TOKEN=$(python3 generate_jwt.py)
-        
-        echo "=== Current NuGet sources ==="
-        dotnet nuget list source
-        
-        # Publish packages using GITHUB_TOKEN
-        for pkg in ${{ env.OUTPUT_DIR }}/*.nupkg; do
-          if [ -f "$pkg" ]; then
-            echo "Publishing $pkg to ${{ env.GITHUB_PACKAGES_URL }}"
-            dotnet nuget push "$pkg" \
-              --api-key "${{ secrets.GITHUB_TOKEN }}" \
-              --source "${{ env.GITHUB_PACKAGES_URL }}" \
-              --skip-duplicate \
-              --no-symbols
           fi
         done
 
