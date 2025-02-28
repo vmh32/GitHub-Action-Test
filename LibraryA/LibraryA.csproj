@@ -21,6 +21,11 @@
   </PropertyGroup>
 
   <ItemGroup>
+    <PackageReference Include="LibraryB" Version="1.0.33" />
+    <PackageReference Include="LibraryC" Version="1.0.33" />
+  </ItemGroup>
+
+  <ItemGroup>
     <None Include="README.md" Pack="true" PackagePath="\" />
   </ItemGroup>
 

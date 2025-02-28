@@ -67,7 +67,7 @@ jobs:
             - 'LibraryB/**'
           "C:LibraryC/LibraryC.csproj:":
             - 'LibraryC/**'
-          "D:LibraryD/LibraryD.nuspec:B":
+          "D:LibraryD/LibraryD.nuspec:":
             - 'LibraryD/**'
 
     - name: Order Dependencies
