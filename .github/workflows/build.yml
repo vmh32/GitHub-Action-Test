@@ -32,16 +32,6 @@ jobs:
         ref: ${{ env.PR_BRANCH }}
         clean: true
 
-    - name: Clean Git State
-      shell: bash
-      run: |
-        # Force clean any leftover files
-        git clean -fdx
-        # Reset any pending changes
-        git reset --hard HEAD
-        # Make sure the working directory is clean
-        git status
-
     - name: Validate Branch Name
       shell: bash
       id: validate
