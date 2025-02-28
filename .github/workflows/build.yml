@@ -398,8 +398,6 @@ jobs:
       with:
         dotnet-version: ${{ env.DOTNET_VERSION }}
         source-url: ${{ env.GITHUB_PACKAGES_URL }}
-      #env:
-      #  NUGET_AUTH_TOKEN: ${{ steps.generate-token.outputs.token }}
 
     - name: Configure NuGet Source
       shell: pwsh
@@ -422,7 +420,7 @@ jobs:
         Write-Host "Adding new source..."
         dotnet nuget add source "${{ env.GITHUB_PACKAGES_URL }}" `
           --username "${{ github.repository_owner }}" `
-          --password "${{ steps.generate-token.outputs.token }}" `
+          --password "${{ secrets.GITHUB_TOKEN }}" `
           --store-password-in-clear-text
         
         Write-Host "=== Final source configuration ==="
@@ -452,7 +450,7 @@ jobs:
 
             if [[ $path == *.csproj ]]; then
               echo "Building and packing $path"
-              dotnet build "$path" -c ${{ env.CONFIGURATION }}
+              dotnet build "$path" -c ${{ env.CONFIGURATION }} -p:UseNuGetReferences=true
               dotnet pack "$path" -c ${{ env.CONFIGURATION }} --no-build -o ${{ env.OUTPUT_DIR }}
               
               # Get the package name from the most recently created package
