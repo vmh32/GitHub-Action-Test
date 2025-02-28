@@ -505,8 +505,14 @@ jobs:
         git clean -fd
         git reset --hard HEAD
 
+        # Create a temporary file to store processed tags
+        processed_tags=$(mktemp)
+
         # Process each version change
-        echo '${{ steps.versions.outputs.version_changes }}' | tr ';' '\n' | while read -r change; do
+        echo '${{ steps.versions.outputs.version_changes }}' | tr ';' '\n' | sort -u | while read -r change; do
+          # Skip empty lines
+          [ -z "$change" ] && continue
+          
           # Extract library and version using grep instead of bash regex
           library=$(echo "$change" | grep -o '^[A-Z]')
           new_version=$(echo "$change" | grep -o '[0-9]\+\.[0-9]\+\.[0-9]\+$')
@@ -514,33 +520,50 @@ jobs:
           if [ ! -z "$library" ] && [ ! -z "$new_version" ]; then
             tag_name="Library${library}/v${new_version}"
             
-            echo "Creating tag $tag_name"
-            # Try to create and push tag with retries
-            max_attempts=3
-            attempt=1
-            while [ $attempt -le $max_attempts ]; do
-              echo "Tag push attempt $attempt of $max_attempts"
-              if git tag -a "$tag_name" -m "Release Library${library} version ${new_version}" && git push origin "$tag_name"; then
-                echo "Tag push successful"
-                break
-              else
-                echo "Tag push failed, cleaning and retrying..."
-                git tag -d "$tag_name" || true
-                git fetch --prune --unshallow --tags
-                ((attempt++))
-                if [ $attempt -gt $max_attempts ]; then
-                  echo "Failed to push tag after $max_attempts attempts"
-                  exit 1
-                fi
-                sleep 5
+            # Check if we've already processed this tag
+            if ! grep -q "^${tag_name}$" "$processed_tags"; then
+              echo "$tag_name" >> "$processed_tags"
+              
+              echo "Creating tag $tag_name"
+              # Check if tag already exists
+              if git rev-parse "$tag_name" >/dev/null 2>&1; then
+                echo "Tag $tag_name already exists, skipping..."
+                continue
               fi
-            done
+              
+              # Try to create and push tag with retries
+              max_attempts=3
+              attempt=1
+              while [ $attempt -le $max_attempts ]; do
+                echo "Tag push attempt $attempt of $max_attempts"
+                if git tag -a "$tag_name" -m "Release Library${library} version ${new_version}" && git push origin "$tag_name"; then
+                  echo "Tag push successful"
+                  break
+                else
+                  echo "Tag push failed, cleaning and retrying..."
+                  git tag -d "$tag_name" 2>/dev/null || true
+                  git fetch --tags
+                  ((attempt++))
+                  if [ $attempt -gt $max_attempts ]; then
+                    echo "Failed to push tag after $max_attempts attempts"
+                    rm -f "$processed_tags"
+                    exit 1
+                  fi
+                  sleep 5
+                fi
+              done
+            else
+              echo "Tag $tag_name was already processed in this run, skipping..."
+            fi
           else
             echo "Could not parse version change: $change"
             echo "Library: $library"
             echo "New version: $new_version"
           fi
         done
+
+        # Clean up temporary file
+        rm -f "$processed_tags"
 
     - name: Print Changed Libraries
       shell: bash
