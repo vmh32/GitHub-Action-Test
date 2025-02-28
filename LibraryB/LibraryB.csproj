@@ -6,6 +6,8 @@
     <ImplicitUsings>enable</ImplicitUsings>
     <Nullable>enable</Nullable>
     
+    <!-- Default to project references unless UseNuGetReferences is set -->
+    <UseNuGetReferences Condition="'$(UseNuGetReferences)' == ''">false</UseNuGetReferences>
     
     <PackageId>LibraryB</PackageId>
     <Version>1.0.41</Version>
@@ -20,8 +22,14 @@
     <RepositoryType>git</RepositoryType>
   </PropertyGroup>
 
-  <ItemGroup>
+  <!-- Package References (used in UAT/PRD) -->
+  <ItemGroup Condition="'$(UseNuGetReferences)' == 'true'">
     <PackageReference Include="LibraryC" Version="1.0.41" />
+  </ItemGroup>
+
+  <!-- Project References (used in local/QA) -->
+  <ItemGroup Condition="'$(UseNuGetReferences)' != 'true'">
+    <ProjectReference Include="..\LibraryC\LibraryC.csproj" />
   </ItemGroup>
 
   <ItemGroup>

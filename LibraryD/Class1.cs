@@ -4,6 +4,6 @@ namespace LibraryD
 {
     public class ClassD
     {
-        // 42
+        // 42b
     }
 } 
