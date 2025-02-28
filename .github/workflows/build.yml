@@ -546,7 +546,7 @@ jobs:
           if [ -f "$pkg" ]; then
             echo "Publishing $pkg to ${{ env.GITHUB_PACKAGES_URL }}"
             dotnet nuget push "$pkg" \
-              --api-key "${{ env.GITHUB_PACKAGES_CLASSIC_PAT_TOKEN }}" \
+              --api-key "${{ env.GITHUB_TOKEN }}" \
               --source "${{ env.GITHUB_PACKAGES_URL }}" \
               --skip-duplicate \
               --no-symbols
