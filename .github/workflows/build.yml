@@ -623,7 +623,7 @@ jobs:
                 # Only output if we have a valid key
                 if [ ! -z "$key" ]; then
                   echo "* Library $key"
-                  echo "  * Path: \`$path\`"
+                  echo "  * Path: \\\`$path\\\`"
                   echo "  * Dependencies: ${deps:-none}"
                   echo "  * File type: $ext"
                   echo ""
@@ -645,7 +645,7 @@ jobs:
             echo ""
             echo "## Created Tags"
             # List the release tag first
-            echo "* \`${{ env.PR_BRANCH }}\`"
+            echo "* \\\`${{ env.PR_BRANCH }}\\\`"
             # List library tags
             if [ ! -z "${{ steps.versions.outputs.version_changes }}" ]; then
               echo "${{ steps.versions.outputs.version_changes }}" | tr ';' '\n' | sort -u | while read -r change; do
@@ -653,7 +653,7 @@ jobs:
                   library=$(echo "$change" | grep -o '^[A-Z]')
                   new_version=$(echo "$change" | grep -o '[0-9]\+\.[0-9]\+\.[0-9]\+$')
                   if [ ! -z "$library" ] && [ ! -z "$new_version" ]; then
-                    echo "* \`Library${library}/v${new_version}\`"
+                    echo "* \\\`Library${library}/v${new_version}\\\`"
                   fi
                 fi
               done
@@ -675,7 +675,8 @@ jobs:
       uses: actions/github-script@v7
       with:
         script: |
-          const summary = `${{ steps.print_changes.outputs.summary }}`;
+          const summary = `${{ steps.print_changes.outputs.summary }}`
+            .replace(/\\\`/g, '`'); // Convert escaped backticks back to regular backticks
           await github.rest.issues.createComment({
             owner: context.repo.owner,
             repo: context.repo.repo,
