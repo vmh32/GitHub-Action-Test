@@ -507,9 +507,11 @@ jobs:
 
         # Process each version change
         echo '${{ steps.versions.outputs.version_changes }}' | tr ';' '\n' | while read -r change; do
-          if [[ $change =~ ^([A-Z]):[[:space:]]([0-9]+\.[0-9]+\.[0-9]+)[[:space:]]->[[:space:]]([0-9]+\.[0-9]+\.[0-9]+)$ ]]; then
-            library="${BASH_REMATCH[1]}"
-            new_version="${BASH_REMATCH[3]}"
+          # Extract library and version using grep instead of bash regex
+          library=$(echo "$change" | grep -o '^[A-Z]')
+          new_version=$(echo "$change" | grep -o '[0-9]\+\.[0-9]\+\.[0-9]\+$')
+          
+          if [ ! -z "$library" ] && [ ! -z "$new_version" ]; then
             tag_name="Library${library}/v${new_version}"
             
             echo "Creating tag $tag_name"
@@ -533,6 +535,10 @@ jobs:
                 sleep 5
               fi
             done
+          else
+            echo "Could not parse version change: $change"
+            echo "Library: $library"
+            echo "New version: $new_version"
           fi
         done
 
