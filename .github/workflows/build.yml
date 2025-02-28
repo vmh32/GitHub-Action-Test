@@ -504,6 +504,36 @@ jobs:
         # Create a temporary file to store processed tags
         processed_tags=$(mktemp)
 
+        # First create the release tag
+        release_tag="${{ env.PR_BRANCH }}"
+        echo "Creating release tag $release_tag"
+        # Check if release tag already exists
+        if git rev-parse "$release_tag" >/dev/null 2>&1; then
+          echo "Release tag $release_tag already exists, skipping..."
+        else
+          # Try to create and push release tag with retries
+          max_attempts=3
+          attempt=1
+          while [ $attempt -le $max_attempts ]; do
+            echo "Release tag push attempt $attempt of $max_attempts"
+            if git tag -a "$release_tag" -m "Release $release_tag" && git push origin "$release_tag"; then
+              echo "Release tag push successful"
+              break
+            else
+              echo "Release tag push failed, cleaning and retrying..."
+              git tag -d "$release_tag" 2>/dev/null || true
+              git fetch --tags
+              ((attempt++))
+              if [ $attempt -gt $max_attempts ]; then
+                echo "Failed to push release tag after $max_attempts attempts"
+                rm -f "$processed_tags"
+                exit 1
+              fi
+              sleep 5
+            fi
+          done
+        fi
+
         # Process each version change
         echo '${{ steps.versions.outputs.version_changes }}' | tr ';' '\n' | sort -u | while read -r change; do
           # Skip empty lines
@@ -562,44 +592,93 @@ jobs:
         rm -f "$processed_tags"
 
     - name: Print Changed Libraries
+      id: print_changes
       shell: bash
       run: |
+        # Create a temporary file to store the output
+        output_file=$(mktemp)
+        
         changes="${{ steps.order.outputs.ordered_changes }}"
         if [ "$changes" = "[]" ]; then
-          echo "No libraries were changed"
+          echo "No libraries were changed" | tee "$output_file"
         else
-          echo "=== Changed Libraries ==="
-          # Remove outer brackets and quotes
-          filtered_changes=$(echo "$changes" | sed 's/^\[\|\]$//g' | sed 's/"//g')
-          
-          # Process each item
-          echo "$filtered_changes" | tr ',' '\n' | while read -r item; do
-            # Trim leading/trailing whitespace
-            item=$(echo "$item" | sed 's/^[[:space:]]*//;s/[[:space:]]*$//')
-            if [ ! -z "$item" ]; then
-              # Extract each part using exact positions
-              key=$(echo "$item" | cut -d':' -f1)
-              path=$(echo "$item" | cut -d':' -f2)
-              deps=$(echo "$item" | cut -d':' -f3)
-              # Extract file extension without the dot
-              ext=$(echo "$path" | grep -o '\.[^.]*$' | sed 's/\.//' || echo "no extension")
-              # Only output if we have a valid key
-              if [ ! -z "$key" ]; then
-                echo "Library changed: $key (path: $path, dependencies: ${deps:-none})"
-                echo "File extension: $ext"
-                echo ""
-              fi
-            fi
-          done
-
-          echo "=== Version Changes ==="
-          if [ ! -z "${{ steps.versions.outputs.version_changes }}" ]; then
-            echo "${{ steps.versions.outputs.version_changes }}" | tr ';' '\n' | while read -r change; do
-              if [ ! -z "$change" ]; then
-                echo "$change"
+          {
+            echo "# Changes Summary"
+            echo ""
+            echo "## Changed Libraries"
+            # Remove outer brackets and quotes
+            filtered_changes=$(echo "$changes" | sed 's/^\[\|\]$//g' | sed 's/"//g')
+            
+            # Process each item
+            echo "$filtered_changes" | tr ',' '\n' | while read -r item; do
+              # Trim leading/trailing whitespace
+              item=$(echo "$item" | sed 's/^[[:space:]]*//;s/[[:space:]]*$//')
+              if [ ! -z "$item" ]; then
+                # Extract each part using exact positions
+                key=$(echo "$item" | cut -d':' -f1)
+                path=$(echo "$item" | cut -d':' -f2)
+                deps=$(echo "$item" | cut -d':' -f3)
+                # Extract file extension without the dot
+                ext=$(echo "$path" | grep -o '\.[^.]*$' | sed 's/\.//' || echo "no extension")
+                # Only output if we have a valid key
+                if [ ! -z "$key" ]; then
+                  echo "* Library $key"
+                  echo "  * Path: \`$path\`"
+                  echo "  * Dependencies: ${deps:-none}"
+                  echo "  * File type: $ext"
+                  echo ""
+                fi
               fi
             done
-          else
-            echo "No version changes detected"
-          fi
-        fi  
+
+            echo "## Version Changes"
+            if [ ! -z "${{ steps.versions.outputs.version_changes }}" ]; then
+              echo "${{ steps.versions.outputs.version_changes }}" | tr ';' '\n' | while read -r change; do
+                if [ ! -z "$change" ]; then
+                  echo "* $change"
+                fi
+              done
+            else
+              echo "No version changes detected"
+            fi
+
+            echo ""
+            echo "## Created Tags"
+            # List the release tag first
+            echo "* \`${{ env.PR_BRANCH }}\`"
+            # List library tags
+            if [ ! -z "${{ steps.versions.outputs.version_changes }}" ]; then
+              echo "${{ steps.versions.outputs.version_changes }}" | tr ';' '\n' | sort -u | while read -r change; do
+                if [ ! -z "$change" ]; then
+                  library=$(echo "$change" | grep -o '^[A-Z]')
+                  new_version=$(echo "$change" | grep -o '[0-9]\+\.[0-9]\+\.[0-9]\+$')
+                  if [ ! -z "$library" ] && [ ! -z "$new_version" ]; then
+                    echo "* \`Library${library}/v${new_version}\`"
+                  fi
+                fi
+              done
+            fi
+          } | tee "$output_file"
+        fi
+
+        # Store the output as a step output (escape newlines for GitHub Actions)
+        output_content=$(cat "$output_file")
+        echo "summary<<EOF" >> $GITHUB_OUTPUT
+        echo "$output_content" >> $GITHUB_OUTPUT
+        echo "EOF" >> $GITHUB_OUTPUT
+
+        # Clean up
+        rm -f "$output_file"
+
+    - name: Add Changes Summary Comment
+      if: steps.order.outputs.ordered_changes != '[]'
+      uses: actions/github-script@v7
+      with:
+        script: |
+          const summary = `${{ steps.print_changes.outputs.summary }}`;
+          await github.rest.issues.createComment({
+            owner: context.repo.owner,
+            repo: context.repo.repo,
+            issue_number: context.issue.number,
+            body: summary
+          });  
