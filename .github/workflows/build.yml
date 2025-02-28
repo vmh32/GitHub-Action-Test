@@ -5,15 +5,16 @@ on:
     types: [opened, reopened]
     branches: [ main ]
 
+permissions:
+  contents: write
+  pull-requests: write
+  packages: write
+
 jobs:
   detect-and-build:
     # Check if the branch name matches Release.#.#.#
     if: startsWith(github.head_ref, 'Release.')
     runs-on: windows-latest
-    permissions:
-      contents: write
-      pull-requests: write
-      packages: write
     env:
       DOTNET_VERSION: '8.0.x'
       GITHUB_APP_ID: ${{ secrets.ACTION_TEST_APP_ID }}
@@ -21,7 +22,7 @@ jobs:
       GITHUB_APP_PRIVATE_KEY: ${{ secrets.ACTION_TEST_APP_PRIVATE_KEY }}
       GITHUB_APP_INSTALLATION_ID: ${{ secrets.ACTION_TEST_APP_INSTALLATION_ID }}
       GITHUB_PACKAGES_URL: https://nuget.pkg.github.com/${{ github.repository_owner }}/index.json
-      GITHUB_PACKAGES_CLASSIC_PAT_TOKEN: ${{ secrets.GITHUB_PAT_FOR_PACKAGES }}
+      NUGET_AUTH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
       CONFIGURATION: Release
       PR_BRANCH: ${{ github.head_ref }}
       GIT_USER_EMAIL: "action@github.com"
@@ -481,7 +482,7 @@ jobs:
     - name: Publish NuGet Packages
       shell: bash
       run: |
-        # NOTE: JWT-based authentication is currently disabled in favor of classic PAT token
+        # NOTE: JWT-based authentication is currently disabled in favor of GITHUB_TOKEN for package publishing
         # Uncomment the following section to use JWT-based authentication instead
         # # Install required packages
         # pip install PyJWT cryptography requests
@@ -541,12 +542,12 @@ jobs:
         echo "=== Current NuGet sources ==="
         dotnet nuget list source
         
-        # Publish packages using classic PAT token
+        # Publish packages using GITHUB_TOKEN
         for pkg in ${{ env.OUTPUT_DIR }}/*.nupkg; do
           if [ -f "$pkg" ]; then
             echo "Publishing $pkg to ${{ env.GITHUB_PACKAGES_URL }}"
             dotnet nuget push "$pkg" \
-              --api-key "${{ env.GITHUB_PACKAGES_CLASSIC_PAT_TOKEN }}" \
+              --api-key "${{ secrets.GITHUB_TOKEN }}" \
               --source "${{ env.GITHUB_PACKAGES_URL }}" \
               --skip-duplicate \
               --no-symbols
