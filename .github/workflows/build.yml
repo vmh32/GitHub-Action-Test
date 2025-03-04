@@ -469,6 +469,7 @@ jobs:
     - name: Create Git Tags
       if: steps.versions.outputs.version_changes != ''
       shell: bash
+      id: tags
       run: |
         # Configure Git
         git config --local user.email "${{ env.GIT_USER_EMAIL }}"
@@ -495,6 +496,7 @@ jobs:
             echo "Release tag push attempt $attempt of $max_attempts"
             if git tag -a "$release_tag" -m "Release $release_tag" && git push origin "$release_tag"; then
               echo "Release tag push successful"
+              echo "$release_tag" >> "$processed_tags"
               break
             else
               echo "Release tag push failed, cleaning and retrying..."
@@ -516,8 +518,9 @@ jobs:
           # Skip empty lines
           [ -z "$change" ] && continue
           
-          # Extract key and version using grep
-          key=$(echo "$change" | grep -o '^[A-Z]')
+          # Extract key and version
+          # Assuming format is "KEY: old_version -> new_version" or "KEY: Updated dependency X to new_version"
+          key=$(echo "$change" | cut -d':' -f1 | tr -d ' ')
           new_version=$(echo "$change" | grep -o '[0-9]\+\.[0-9]\+\.[0-9]\+$')
           
           if [ ! -z "$key" ] && [ ! -z "$new_version" ]; then
@@ -564,6 +567,11 @@ jobs:
             echo "New version: $new_version"
           fi
         done
+
+        # Store the processed tags as a step output
+        echo "tags<<EOF" >> $GITHUB_OUTPUT
+        cat "$processed_tags" >> $GITHUB_OUTPUT
+        echo "EOF" >> $GITHUB_OUTPUT
 
         # Clean up temporary file
         rm -f "$processed_tags"
@@ -621,20 +629,12 @@ jobs:
 
             echo ""
             echo "## Created Tags"
-            # List the release tag first
-            echo "* \\\`${{ env.PR_BRANCH }}\\\`"
-            # List package tags (using sort -u to remove duplicates)
-            if [ ! -z "${{ steps.versions.outputs.version_changes }}" ]; then
-              echo "${{ steps.versions.outputs.version_changes }}" | tr ';' '\n' | sort -u | while read -r change; do
-                if [ ! -z "$change" ]; then
-                  key=$(echo "$change" | grep -o '^[A-Z]')
-                  new_version=$(echo "$change" | grep -o '[0-9]\+\.[0-9]\+\.[0-9]\+$')
-                  if [ ! -z "$key" ] && [ ! -z "$new_version" ]; then
-                    echo "* \\\`$key/v${new_version}\\\`" | sort -u
-                  fi
-                fi
-              done | sort -u
-            fi
+            # Use the actual created tags from the previous step
+            echo "${{ steps.tags.outputs.tags }}" | while read -r tag; do
+              if [ ! -z "$tag" ]; then
+                echo "* \\\`$tag\\\`"
+              fi
+            done
 
             echo ""
             echo "## Package Information"
