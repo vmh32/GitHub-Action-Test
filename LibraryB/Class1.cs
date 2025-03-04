@@ -2,6 +2,6 @@
 {
     public class ClassB
     {
-        // 48
+        // 49
     }
 }

@@ -516,12 +516,12 @@ jobs:
           # Skip empty lines
           [ -z "$change" ] && continue
           
-          # Extract library and version using grep instead of bash regex
-          library=$(echo "$change" | grep -o '^[A-Z]')
+          # Extract key and version using grep
+          key=$(echo "$change" | grep -o '^[A-Z]')
           new_version=$(echo "$change" | grep -o '[0-9]\+\.[0-9]\+\.[0-9]\+$')
           
-          if [ ! -z "$library" ] && [ ! -z "$new_version" ]; then
-            tag_name="Library${library}/v${new_version}"
+          if [ ! -z "$key" ] && [ ! -z "$new_version" ]; then
+            tag_name="$key/v${new_version}"
             
             # Check if we've already processed this tag
             if ! grep -q "^${tag_name}$" "$processed_tags"; then
@@ -539,7 +539,7 @@ jobs:
               attempt=1
               while [ $attempt -le $max_attempts ]; do
                 echo "Tag push attempt $attempt of $max_attempts"
-                if git tag -a "$tag_name" -m "Release Library${library} version ${new_version}" && git push origin "$tag_name"; then
+                if git tag -a "$tag_name" -m "Release $key version ${new_version}" && git push origin "$tag_name"; then
                   echo "Tag push successful"
                   break
                 else
@@ -560,7 +560,7 @@ jobs:
             fi
           else
             echo "Could not parse version change: $change"
-            echo "Library: $library"
+            echo "Key: $key"
             echo "New version: $new_version"
           fi
         done
@@ -599,7 +599,7 @@ jobs:
                 ext=$(echo "$path" | grep -o '\.[^.]*$' | sed 's/\.//' || echo "no extension")
                 # Only output if we have a valid key
                 if [ ! -z "$key" ]; then
-                  echo "* Library $key"
+                  echo "* Package $key"
                   echo "  * Path: \\\`$path\\\`"
                   echo "  * Dependencies: ${deps:-none}"
                   echo "  * File type: $ext"
@@ -623,18 +623,25 @@ jobs:
             echo "## Created Tags"
             # List the release tag first
             echo "* \\\`${{ env.PR_BRANCH }}\\\`"
-            # List library tags (using sort -u to remove duplicates)
+            # List package tags (using sort -u to remove duplicates)
             if [ ! -z "${{ steps.versions.outputs.version_changes }}" ]; then
               echo "${{ steps.versions.outputs.version_changes }}" | tr ';' '\n' | sort -u | while read -r change; do
                 if [ ! -z "$change" ]; then
-                  library=$(echo "$change" | grep -o '^[A-Z]')
+                  key=$(echo "$change" | grep -o '^[A-Z]')
                   new_version=$(echo "$change" | grep -o '[0-9]\+\.[0-9]\+\.[0-9]\+$')
-                  if [ ! -z "$library" ] && [ ! -z "$new_version" ]; then
-                    echo "* \\\`Library${library}/v${new_version}\\\`" | sort -u
+                  if [ ! -z "$key" ] && [ ! -z "$new_version" ]; then
+                    echo "* \\\`$key/v${new_version}\\\`" | sort -u
                   fi
                 fi
               done | sort -u
             fi
+
+            echo ""
+            echo "## Package Information"
+            echo "* Package Registry: https://github.com/${{ github.repository }}/packages"
+            echo "* NuGet Source: https://nuget.pkg.github.com/${{ github.repository_owner }}/index.json"
+            echo "* Required Authentication: GitHub Personal Access Token with \\\`read:packages\\\` scope"
+            echo "* Note: See repository documentation for detailed setup instructions"
           } | tee "$output_file"
         fi
 
