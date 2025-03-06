@@ -282,4 +282,95 @@ If Visual Studio gets stuck using an old package version even after a new versio
    ```
    This will show all configured sources and available versions of the package, helping identify if the package is visible and up to date.
 
-These steps should resolve most caching issues with NuGet packages in Visual Studio. 
+These steps should resolve most caching issues with NuGet packages in Visual Studio.
+
+## Adding a New Library
+
+Here's an example of adding `LibraryE` that:
+- Depends on `LibraryC`
+- Is a dependency for `LibraryA`
+
+### Option 1: Modern Project (.csproj)
+
+1. Configure the project files:
+
+```xml
+<!-- LibraryE.csproj -->
+<ItemGroup Condition="'$(UseNuGetReferences)' == 'true'">
+  <PackageReference Include="LibraryC" Version="1.0.0" />
+</ItemGroup>
+<ItemGroup Condition="'$(UseNuGetReferences)' != 'true'">
+  <ProjectReference Include="..\LibraryC\LibraryC.csproj" />
+</ItemGroup>
+
+<!-- LibraryA.csproj -->
+<ItemGroup Condition="'$(UseNuGetReferences)' == 'true'">
+  <PackageReference Include="LibraryE" Version="1.0.0" />
+</ItemGroup>
+<ItemGroup Condition="'$(UseNuGetReferences)' != 'true'">
+  <ProjectReference Include="..\LibraryE\LibraryE.csproj" />
+</ItemGroup>
+```
+
+### Option 2: Legacy Library (.nuspec)
+
+1. Generate the initial nuspec file:
+```powershell
+nuget spec LibraryE
+```
+This creates a template `LibraryE.nuspec` that you can then modify:
+
+```xml
+<?xml version="1.0" encoding="utf-8"?>
+<package xmlns="http://schemas.microsoft.com/packaging/2010/07/nuspec.xsd">
+  <metadata>
+    <id>LibraryE</id>
+    <version>1.0.0</version>
+    <title>Library E</title>
+    <authors>Your Name</authors>
+    <description>Description of Library E</description>
+    <dependencies>
+      <dependency id="LibraryC" version="1.0.0" />
+    </dependencies>
+  </metadata>
+  <files>
+    <!-- Include compiled DLL from project output -->
+    <file src="bin\Release\net8.0\LibraryE.dll" target="lib\net8.0" />
+    <!-- Include XML documentation file if exists -->
+    <file src="bin\Release\net8.0\LibraryE.xml" target="lib\net8.0" />
+    <!-- Include PDB file for debugging -->
+    <file src="bin\Release\net8.0\LibraryE.pdb" target="lib\net8.0" />
+  </files>
+</package>
+```
+
+2. Add the new library path to workflow triggers:
+```yaml
+on:
+  pull_request:
+    paths:
+      - 'LibraryA/**'
+      - 'LibraryB/**'
+      - 'LibraryC/**'
+      - 'LibraryD/**'
+      - 'LibraryE/**'  # Add new library
+```
+
+3. Update the change detection filters:
+```yaml
+- name: Detect Changed Packages
+  with:
+    filters: |
+      "C:LibraryC/LibraryC.csproj:":
+        - 'LibraryC/**'
+      "E:LibraryE/LibraryE.nuspec:C":  # E depends on C, using nuspec
+        - 'LibraryE/**'
+      "A:LibraryA/LibraryA.csproj:E":  # A depends on E
+        - 'LibraryA/**'
+      # ... other libraries ...
+```
+
+Now when:
+- `LibraryC` changes → `LibraryE` updates its dependency → `LibraryA` updates its dependency
+- `LibraryE` changes → `LibraryA` updates its dependency
+- `LibraryA` changes → Only `LibraryA` version is updated 

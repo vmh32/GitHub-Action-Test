@@ -164,62 +164,90 @@ jobs:
         import os
         import glob
 
+        def debug_log(message, data=None):
+            print(f"\n=== DEBUG: {message} ===")
+            if data is not None:
+                print(f"Data: {repr(data)}")
+            print("=" * (len(message) + 16))
+
         # Register the namespace to avoid ns0 prefix
         ET.register_namespace('', 'http://schemas.microsoft.com/packaging/2010/07/nuspec.xsd')
 
         def parse_version(version_str):
+            debug_log("Parsing version string", version_str)
             match = re.match(r'(\d+)\.(\d+)\.(\d+)', version_str)
             if not match:
+                debug_log("Failed to parse version", version_str)
                 return (0, 0, 0)
             return tuple(map(int, match.groups()))
 
         def get_version_from_file(file_path):
-            if file_path.endswith('.csproj'):
-                tree = ET.parse(file_path)
-                version_elem = tree.find(".//Version")
-                return version_elem.text if version_elem is not None else "1.0.0"
-            elif file_path.endswith('.nuspec'):
-                tree = ET.parse(file_path)
-                ns = {'ns': 'http://schemas.microsoft.com/packaging/2010/07/nuspec.xsd'}
-                version_elem = tree.find(".//ns:version", ns)
-                return version_elem.text if version_elem is not None else "1.0.0"
+            debug_log("Reading version from file", file_path)
+            try:
+                if file_path.endswith('.csproj'):
+                    tree = ET.parse(file_path)
+                    version_elem = tree.find(".//Version")
+                    version = version_elem.text if version_elem is not None else "1.0.0"
+                    debug_log("Found version in csproj", version)
+                    return version
+                elif file_path.endswith('.nuspec'):
+                    tree = ET.parse(file_path)
+                    ns = {'ns': 'http://schemas.microsoft.com/packaging/2010/07/nuspec.xsd'}
+                    version_elem = tree.find(".//ns:version", ns)
+                    version = version_elem.text if version_elem is not None else "1.0.0"
+                    debug_log("Found version in nuspec", version)
+                    return version
+            except Exception as e:
+                debug_log(f"Error reading version from {file_path}", str(e))
+                raise
             return "1.0.0"
 
         def update_version_in_file(file_path, new_version):
-            if file_path.endswith('.csproj'):
-                tree = ET.parse(file_path)
-                version_elem = tree.find(".//Version")
-                if version_elem is not None:
-                    version_elem.text = new_version
-                tree.write(file_path, encoding='utf-8', xml_declaration=True)
-            elif file_path.endswith('.nuspec'):
-                tree = ET.parse(file_path)
-                ns = {'ns': 'http://schemas.microsoft.com/packaging/2010/07/nuspec.xsd'}
-                version_elem = tree.find(".//ns:version", ns)
-                if version_elem is not None:
-                    version_elem.text = new_version
-                # Use default namespace for writing
-                tree.write(file_path, encoding='utf-8', xml_declaration=True)
+            debug_log(f"Updating version in {file_path} to {new_version}")
+            try:
+                if file_path.endswith('.csproj'):
+                    tree = ET.parse(file_path)
+                    version_elem = tree.find(".//Version")
+                    if version_elem is not None:
+                        version_elem.text = new_version
+                    tree.write(file_path, encoding='utf-8', xml_declaration=True)
+                elif file_path.endswith('.nuspec'):
+                    tree = ET.parse(file_path)
+                    ns = {'ns': 'http://schemas.microsoft.com/packaging/2010/07/nuspec.xsd'}
+                    version_elem = tree.find(".//ns:version", ns)
+                    if version_elem is not None:
+                        version_elem.text = new_version
+                    tree.write(file_path, encoding='utf-8', xml_declaration=True)
+            except Exception as e:
+                debug_log(f"Error updating version in {file_path}", str(e))
+                raise
 
         def update_dependency_version(file_path, dep_key, new_version):
+            debug_log(f"Updating dependency {dep_key} to version {new_version} in {file_path}")
             updated = False
-            if file_path.endswith('.csproj'):
-                tree = ET.parse(file_path)
-                # Look for PackageReference with the matching Include attribute
-                for pkg_ref in tree.findall(".//PackageReference[@Include='Library{}']".format(dep_key)):
-                    pkg_ref.set('Version', new_version)
-                    updated = True
-                if updated:
-                    tree.write(file_path, encoding='utf-8', xml_declaration=True)
-            elif file_path.endswith('.nuspec'):
-                tree = ET.parse(file_path)
-                ns = {'ns': 'http://schemas.microsoft.com/packaging/2010/07/nuspec.xsd'}
-                # Look for dependency with matching id
-                for dep in tree.findall(".//ns:dependency[@id='Library{}']".format(dep_key), ns):
-                    dep.set('version', new_version)
-                    updated = True
-                if updated:
-                    tree.write(file_path, encoding='utf-8', xml_declaration=True)
+            try:
+                if file_path.endswith('.csproj'):
+                    tree = ET.parse(file_path)
+                    for pkg_ref in tree.findall(".//PackageReference[@Include='Library{}']".format(dep_key)):
+                        old_version = pkg_ref.get('Version')
+                        pkg_ref.set('Version', new_version)
+                        updated = True
+                        debug_log(f"Updated PackageReference version", f"from {old_version} to {new_version}")
+                    if updated:
+                        tree.write(file_path, encoding='utf-8', xml_declaration=True)
+                elif file_path.endswith('.nuspec'):
+                    tree = ET.parse(file_path)
+                    ns = {'ns': 'http://schemas.microsoft.com/packaging/2010/07/nuspec.xsd'}
+                    for dep in tree.findall(".//ns:dependency[@id='Library{}']".format(dep_key), ns):
+                        old_version = dep.get('version')
+                        dep.set('version', new_version)
+                        updated = True
+                        debug_log(f"Updated dependency version", f"from {old_version} to {new_version}")
+                    if updated:
+                        tree.write(file_path, encoding='utf-8', xml_declaration=True)
+            except Exception as e:
+                debug_log(f"Error updating dependency in {file_path}", str(e))
+                raise
             return updated
 
         def get_library_info(file_path):
@@ -275,31 +303,44 @@ jobs:
         changes = '${{ steps.order.outputs.ordered_changes }}'
         pr_comments = '''${{ steps.pr_comment.outputs.result }}'''
 
+        debug_log("Processing ordered changes", changes)
+        debug_log("PR comments", pr_comments)
+
         if changes == '[]':
+            debug_log("No changes to process")
             sys.exit(0)
 
         # Remove brackets and split into items
         items = [item.strip() for item in changes.strip('[]').split(',')]
+        debug_log("Parsed change items", items)
         
         # First pass: Calculate all new versions for changed libraries
         version_updates = {}
         for item in items:
-            parts = item.strip('"').split(':')
-            key = parts[0]
-            file_path = parts[1]
-            
-            # Get current version
-            current_version = get_version_from_file(file_path)
-            
-            # Calculate new version
-            new_version = calculate_new_version(current_version, key, pr_comments)
-            
-            # Store for later use
-            version_updates[key] = {
-                'file_path': file_path,
-                'new_version': new_version,
-                'current_version': current_version
-            }
+            try:
+                parts = item.strip('"').split(':')
+                debug_log("Processing item parts", parts)
+                
+                key = parts[0]
+                file_path = parts[1]
+                
+                # Get current version
+                current_version = get_version_from_file(file_path)
+                
+                # Calculate new version
+                new_version = calculate_new_version(current_version, key, pr_comments)
+                
+                # Store for later use
+                version_updates[key] = {
+                    'file_path': file_path,
+                    'new_version': new_version,
+                    'current_version': current_version
+                }
+            except Exception as e:
+                debug_log(f"Error processing item: {item}", str(e))
+                raise
+
+        debug_log("Version updates to apply", version_updates)
 
         # Scan all libraries in the workspace
         all_libraries = scan_all_libraries()
@@ -309,18 +350,23 @@ jobs:
         
         # First update the versions of changed libraries
         for key, info in version_updates.items():
-            # Update the package's own version
-            update_version_in_file(info['file_path'], info['new_version'])
-            version_changes.append(f"{key}: {info['current_version']} -> {info['new_version']}")
-            
-            # Update this package's version in ALL libraries that depend on it
-            for lib_key, lib_info in all_libraries.items():
-                if key in lib_info['dependencies']:
-                    if update_dependency_version(lib_info['file_path'], key, info['new_version']):
-                        version_changes.append(f"{lib_key}: Updated dependency {key} to {info['new_version']}")
+            try:
+                # Update the package's own version
+                update_version_in_file(info['file_path'], info['new_version'])
+                version_changes.append(f"{key}: {info['current_version']} -> {info['new_version']}")
+                
+                # Update this package's version in ALL libraries that depend on it
+                for lib_key, lib_info in all_libraries.items():
+                    if key in lib_info['dependencies']:
+                        if update_dependency_version(lib_info['file_path'], key, info['new_version']):
+                            version_changes.append(f"{lib_key}: Updated dependency {key} to {info['new_version']}")
+            except Exception as e:
+                debug_log(f"Error updating versions for {key}", str(e))
+                raise
 
         # Print summary
-        print("Version changes summary:")
+        debug_log("Version changes summary", version_changes)
+        print("\nVersion changes summary:")
         for change in version_changes:
             print(change)
         
