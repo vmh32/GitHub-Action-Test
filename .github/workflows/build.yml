@@ -490,12 +490,26 @@ jobs:
               fi
             elif [[ $path == *.nuspec ]]; then
               echo "Building and packing $path"
-              # Get directory containing .nuspec file
+              # Get directory and name from the nuspec file path
               dir=$(dirname "$path")
-              # Build the corresponding .csproj if it exists
-              if [ -f "$dir/$dir.csproj" ]; then
-                dotnet build "$dir/$dir.csproj" -c ${{ env.CONFIGURATION }}
+              name=$(basename "$path" .nuspec)
+              echo "Looking for matching .csproj file: $dir/$name.csproj"
+              
+              # First try to build the matching .csproj if it exists
+              if [ -f "$dir/$name.csproj" ]; then
+                echo "Building matching $dir/$name.csproj"
+                dotnet build "$dir/$name.csproj" -c ${{ env.CONFIGURATION }}
+              else
+                echo "No matching .csproj found, looking for other .csproj files in $dir"
+                # Fall back to building all .csproj files in the directory
+                for csproj in "$dir"/*.csproj; do
+                  if [ -f "$csproj" ]; then
+                    echo "Building $csproj"
+                    dotnet build "$csproj" -c ${{ env.CONFIGURATION }}
+                  fi
+                done
               fi
+              
               nuget pack "$path" -OutputDirectory ${{ env.OUTPUT_DIR }}
               
               # Get the package name from the most recently created package
