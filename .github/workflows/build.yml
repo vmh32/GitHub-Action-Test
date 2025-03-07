@@ -474,8 +474,11 @@ jobs:
             echo "Processing $path"
 
             if [[ $path == *.csproj ]]; then
+              echo "Restoring dependencies for $path"
+              dotnet restore "$path" --force-evaluate
+              
               echo "Building and packing $path"
-              dotnet build "$path" -c ${{ env.CONFIGURATION }} -p:UseNuGetReferences=true
+              dotnet build "$path" -c ${{ env.CONFIGURATION }} -p:UseNuGetReferences=true --no-restore
               dotnet pack "$path" -c ${{ env.CONFIGURATION }} --no-build -o ${{ env.OUTPUT_DIR }}
               
               # Get the package name from the most recently created package
@@ -493,23 +496,30 @@ jobs:
               # Get directory and name from the nuspec file path
               dir=$(dirname "$path")
               name=$(basename "$path" .nuspec)
-              echo "Looking for matching .csproj file: $dir/$name.csproj"
               
-              # First try to build the matching .csproj if it exists
+              echo "Looking for matching .csproj file: $dir/$name.csproj"
+              # Then try to build the matching .csproj if it exists
               if [ -f "$dir/$name.csproj" ]; then
+                echo "Restoring dependencies for $dir/$name.csproj"
+                dotnet restore "$dir/$name.csproj" --force-evaluate
+                
                 echo "Building matching $dir/$name.csproj"
-                dotnet build "$dir/$name.csproj" -c ${{ env.CONFIGURATION }}
+                dotnet build "$dir/$name.csproj" -c ${{ env.CONFIGURATION }} --no-restore
               else
                 echo "No matching .csproj found, looking for other .csproj files in $dir"
                 # Fall back to building all .csproj files in the directory
                 for csproj in "$dir"/*.csproj; do
                   if [ -f "$csproj" ]; then
+                    echo "Restoring dependencies for $csproj"
+                    dotnet restore "$csproj" --force-evaluate
+                    
                     echo "Building $csproj"
-                    dotnet build "$csproj" -c ${{ env.CONFIGURATION }}
+                    dotnet build "$csproj" -c ${{ env.CONFIGURATION }} --no-restore
                   fi
                 done
               fi
               
+              echo "Packing $path"
               nuget pack "$path" -OutputDirectory ${{ env.OUTPUT_DIR }}
               
               # Get the package name from the most recently created package
