@@ -63,6 +63,11 @@ This action supports a robust development workflow using the `UseNuGetReferences
    - Enables direct debugging and real-time code changes
    - Example project structure:
    ```xml
+   <!-- Set default value for UseNuGetReferences -->
+   <PropertyGroup>
+     <UseNuGetReferences Condition="'$(UseNuGetReferences)' == ''">false</UseNuGetReferences>
+   </PropertyGroup>
+
    <ItemGroup>
      <ProjectReference Include="..\LibraryB\LibraryB.csproj" />
      <ProjectReference Include="..\LibraryC\LibraryC.csproj" />
@@ -76,6 +81,11 @@ This action supports a robust development workflow using the `UseNuGetReferences
    
 To support this workflow, structure your project files like this:
 ```xml
+<!-- Set default value for UseNuGetReferences -->
+<PropertyGroup>
+  <UseNuGetReferences Condition="'$(UseNuGetReferences)' == ''">false</UseNuGetReferences>
+</PropertyGroup>
+
 <!-- NuGet Package References for QA/UAT/PRD -->
 <ItemGroup Condition="'$(UseNuGetReferences)' == 'true'">
   <PackageReference Include="LibraryB" Version="1.0.46" />
@@ -245,6 +255,33 @@ Example output:
 10. Configure CI/CD systems with appropriate package source credentials
 
 ## Troubleshooting
+
+### Missing Dependencies When Using UseNuGetReferences=true
+
+When building with `UseNuGetReferences=true`, you might encounter errors about missing dependencies that weren't issues during local development. This typically happens with:
+- Framework dependencies (e.g., System.ServiceProcess.ServiceController)
+- Transitive dependencies (packages required by your dependencies)
+
+This occurs because `UseNuGetReferences=true` changes how dependencies are resolved:
+- With project references (`false`), dependencies are resolved through the project reference chain
+- With package references (`true`), each project needs explicit package references
+
+To fix this, add the missing dependencies to your .csproj files in the package references section:
+```xml
+<ItemGroup Condition="'$(UseNuGetReferences)' == 'true'">
+  <!-- Existing package references -->
+  <PackageReference Include="LibraryB" Version="1.0.0" />
+  
+  <!-- Framework and transitive dependencies -->
+  <PackageReference Include="System.ServiceProcess.ServiceController" Version="8.0.0" />
+  <PackageReference Include="Azure.Storage.Blobs" Version="12.19.1" />
+</ItemGroup>
+```
+
+You can identify missing dependencies by:
+1. Running the build locally with `UseNuGetReferences=true`
+2. Checking build errors in the GitHub Action logs
+3. Using `dotnet list package --include-transitive` to see all required packages
 
 ### Visual Studio NuGet Cache Issues
 

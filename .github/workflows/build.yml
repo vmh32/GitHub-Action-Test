@@ -475,7 +475,7 @@ jobs:
 
             if [[ $path == *.csproj ]]; then
               echo "Restoring dependencies for $path"
-              dotnet restore "$path" --force-evaluate
+              dotnet restore "$path" --force-evaluate -p:UseNuGetReferences=true
               
               echo "Building and packing $path"
               dotnet build "$path" -c ${{ env.CONFIGURATION }} -p:UseNuGetReferences=true --no-restore
@@ -501,20 +501,20 @@ jobs:
               # Then try to build the matching .csproj if it exists
               if [ -f "$dir/$name.csproj" ]; then
                 echo "Restoring dependencies for $dir/$name.csproj"
-                dotnet restore "$dir/$name.csproj" --force-evaluate
+                dotnet restore "$dir/$name.csproj" --force-evaluate -p:UseNuGetReferences=true
                 
                 echo "Building matching $dir/$name.csproj"
-                dotnet build "$dir/$name.csproj" -c ${{ env.CONFIGURATION }} --no-restore
+                dotnet build "$dir/$name.csproj" -c ${{ env.CONFIGURATION }} -p:UseNuGetReferences=true --no-restore
               else
                 echo "No matching .csproj found, looking for other .csproj files in $dir"
                 # Fall back to building all .csproj files in the directory
                 for csproj in "$dir"/*.csproj; do
                   if [ -f "$csproj" ]; then
                     echo "Restoring dependencies for $csproj"
-                    dotnet restore "$csproj" --force-evaluate
+                    dotnet restore "$csproj" --force-evaluate -p:UseNuGetReferences=true
                     
                     echo "Building $csproj"
-                    dotnet build "$csproj" -c ${{ env.CONFIGURATION }} --no-restore
+                    dotnet build "$csproj" -c ${{ env.CONFIGURATION }} -p:UseNuGetReferences=true --no-restore
                   fi
                 done
               fi
