@@ -6,9 +6,6 @@
         <title>LibraryD</title>
         <authors>Your Name</authors>
         <description>Description of LibraryD</description>
-        <dependencies>
-            <dependency id="LibraryB" version="1.0.0" />
-        </dependencies>
     </metadata>
     <files>
         <file src="bin\Release\**\*.*" target="lib" />

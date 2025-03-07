@@ -410,4 +410,4 @@ on:
 Now when:
 - `LibraryC` changes → `LibraryE` updates its dependency → `LibraryA` updates its dependency
 - `LibraryE` changes → `LibraryA` updates its dependency
-- `LibraryA` changes → Only `LibraryA` version is updated 
+- `LibraryA` changes → Only `LibraryA` version is updated

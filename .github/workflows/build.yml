@@ -451,6 +451,49 @@ jobs:
         Write-Host "=== Final source configuration ==="
         dotnet nuget list source
 
+    - name: Setup NuGet
+      if: contains(steps.order.outputs.ordered_changes, '.nuspec')
+      uses: NuGet/setup-nuget@v2
+      with:
+        nuget-version: '6.x'
+
+    - name: Restore NuGet Dependencies
+      if: contains(steps.order.outputs.ordered_changes, '.nuspec')
+      shell: bash
+      run: |
+        # Process ordered changes to find .nuspec files and their directories
+        changes="${{ steps.order.outputs.ordered_changes }}"
+        
+        # Create an array to store unique solution files
+        declare -A processed_solutions
+        
+        echo "$changes" | sed 's/^\[\|\]$//g' | sed 's/"//g' | tr ',' '\n' | while read -r item; do
+          # Trim whitespace
+          item=$(echo "$item" | sed 's/^[[:space:]]*//;s/[[:space:]]*$//')
+          if [ ! -z "$item" ]; then
+            # Extract path
+            path=$(echo "$item" | cut -d':' -f2)
+            if [[ $path == *.nuspec ]]; then
+              dir=$(dirname "$path")
+              echo "Processing directory $dir for NuGet restore"
+              
+              # Check for solution files and restore each one found
+              for sln in "$dir"/*.sln; do
+                if [ -f "$sln" ]; then
+                  # Use the full path as the key to ensure uniqueness
+                  if [ -z "${processed_solutions[$sln]}" ]; then
+                    echo "Found solution file $sln, running nuget restore"
+                    nuget restore "$sln"
+                    processed_solutions[$sln]=1
+                  else
+                    echo "Solution $sln has already been processed, skipping..."
+                  fi
+                fi
+              done
+            fi
+          fi
+        done
+
     - name: Build and Pack NuGet Packages
       shell: bash
       run: |
@@ -497,8 +540,9 @@ jobs:
               dir=$(dirname "$path")
               name=$(basename "$path" .nuspec)
               
-              echo "Looking for matching .csproj file: $dir/$name.csproj"
-              # Then try to build the matching .csproj if it exists
+              # First restore all dependencies
+              echo "Looking for .csproj files to restore in $dir"
+              # Try to restore the matching .csproj if it exists
               if [ -f "$dir/$name.csproj" ]; then
                 echo "Restoring dependencies for $dir/$name.csproj"
                 dotnet restore "$dir/$name.csproj" --force-evaluate -p:UseNuGetReferences=true
@@ -507,7 +551,7 @@ jobs:
                 dotnet build "$dir/$name.csproj" -c ${{ env.CONFIGURATION }} -p:UseNuGetReferences=true --no-restore
               else
                 echo "No matching .csproj found, looking for other .csproj files in $dir"
-                # Fall back to building all .csproj files in the directory
+                # Fall back to restoring all .csproj files in the directory
                 for csproj in "$dir"/*.csproj; do
                   if [ -f "$csproj" ]; then
                     echo "Restoring dependencies for $csproj"
