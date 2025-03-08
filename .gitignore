@@ -59,3 +59,4 @@ nupkg/
 .idea/
 .vscode/
 *.sln.iml scripts/
+scripts/
