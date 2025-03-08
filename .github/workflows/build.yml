@@ -489,12 +489,19 @@ jobs:
     - name: Create Transform Script
       shell: bash
       run: |
-        cat > transform.py << 'EOF'
+        # Create the scripts directory
+        mkdir -p scripts
+        
+        # Create transform script with working directory handling
+        cat > scripts/transform.py << 'EOF'
         import json
         import sys
+        import os
 
         def transform_keys(ordered_keys, package_map_path):
-            with open(package_map_path, 'r') as f:
+            # Ensure we have absolute path
+            abs_map_path = os.path.abspath(package_map_path)
+            with open(abs_map_path, 'r') as f:
                 package_map = json.load(f)
             
             keys = ordered_keys.strip('[]').split(',')
@@ -515,8 +522,10 @@ jobs:
       if: steps.order.outputs.has_nuspec == 'true'
       shell: bash
       run: |
+        # Get absolute path to package_map.json
+        package_map_path="$(pwd)/package_map.json"
         ordered_keys="${{ steps.order.outputs.ordered_changes }}"
-        changes=$(python3 transform.py "$ordered_keys" "package_map.json")
+        changes=$(python3 scripts/transform.py "$ordered_keys" "$package_map_path")
         
         declare -A processed_solutions
         
@@ -542,8 +551,10 @@ jobs:
     - name: Build and Pack NuGet Packages
       shell: bash
       run: |
+        # Get absolute path to package_map.json
+        package_map_path="$(pwd)/package_map.json"
         ordered_keys="${{ steps.order.outputs.ordered_changes }}"
-        changes=$(python3 transform.py "$ordered_keys" "package_map.json")
+        changes=$(python3 scripts/transform.py "$ordered_keys" "$package_map_path")
         
         if [ "$changes" = "[]" ]; then
           echo "No libraries to build and pack"
@@ -729,9 +740,11 @@ jobs:
       id: print_changes
       shell: bash
       run: |
+        # Get absolute path to package_map.json
+        package_map_path="$(pwd)/package_map.json"
         output_file=$(mktemp)
         ordered_keys="${{ steps.order.outputs.ordered_changes }}"
-        changes=$(python3 transform.py "$ordered_keys" "package_map.json")
+        changes=$(python3 scripts/transform.py "$ordered_keys" "$package_map_path")
         
         if [ "$changes" = "[]" ]; then
           echo "No libraries were changed" | tee "$output_file"
