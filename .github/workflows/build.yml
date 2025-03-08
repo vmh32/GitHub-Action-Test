@@ -349,8 +349,9 @@ jobs:
         version_updates = {}
         for item in items:
             try:
-                key = item['key']
-                file_path = item['file_path']
+                parts = item.split(':')
+                key = parts[0]
+                file_path = parts[1]
                 
                 # Get current version
                 current_version = get_version_from_file(file_path)
