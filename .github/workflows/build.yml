@@ -46,18 +46,33 @@ jobs:
           exit 1
         fi
 
+    - name: Create Package Mapping
+      id: package_map
+      shell: bash
+      run: |
+        # Create package mapping file
+        cat > package_map.json << 'EOF'
+        {
+          "A": "A:LibraryA/LibraryA.csproj:B+C",
+          "B": "B:LibraryB/LibraryB.csproj:C",
+          "C": "C:LibraryC/LibraryC.csproj:",
+          "D": "D:LibraryD/LibraryD.nuspec:"
+        }
+        EOF
+        echo "Created package mapping file"
+
     - name: Detect Changed Packages
       id: filter
       uses: dorny/paths-filter@v3
       with:
         filters: |
-          "A:LibraryA/LibraryA.csproj:B+C":
+          A:
             - 'LibraryA/**'
-          "B:LibraryB/LibraryB.csproj:C":
+          B:
             - 'LibraryB/**'
-          "C:LibraryC/LibraryC.csproj:":
+          C:
             - 'LibraryC/**'
-          "D:LibraryD/LibraryD.nuspec:":
+          D:
             - 'LibraryD/**'
 
     - name: Order Dependencies
@@ -70,20 +85,25 @@ jobs:
         import os
         from collections import defaultdict
 
-        def create_graph(items):
+        def load_package_map():
+            with open('package_map.json', 'r') as f:
+                return json.load(f)
+
+        def create_graph(items, package_map):
             graph = defaultdict(list)
             nodes = set()
             
             # Parse the items and build the graph
             for item in items:
-                parts = item.strip('"').split(':')
-                key = parts[0]
-                deps = parts[2].split('+') if parts[2] else []
-                nodes.add(key)
-                for dep in deps:
-                    if dep:
-                        graph[key].append(dep)
-                        nodes.add(dep)
+                key = item.strip('"')
+                if key in package_map:
+                    parts = package_map[key].split(':')
+                    deps = parts[2].split('+') if parts[2] else []
+                    nodes.add(key)
+                    for dep in deps:
+                        if dep:
+                            graph[key].append(dep)
+                            nodes.add(dep)
             return graph, nodes
 
         def topological_sort(graph, nodes):
@@ -110,32 +130,35 @@ jobs:
             
             return order
 
+        # Load package mapping
+        package_map = load_package_map()
+
         # Get the changes from GitHub Actions environment
         changes = '${{ steps.filter.outputs.changes }}'
         if changes == '[]':
             with open(os.environ['GITHUB_OUTPUT'], 'a') as f:
-                f.write('ordered_changes=[]')
+                f.write('ordered_changes=[]\n')
+                f.write('has_nuspec=false\n')
             sys.exit(0)
 
         # Remove brackets and split into items
         items = [item.strip() for item in changes.strip('[]').split(',')]
         
         # Create dependency graph
-        graph, nodes = create_graph(items)
+        graph, nodes = create_graph(items, package_map)
         
         # Get topological order
         ordered_keys = topological_sort(graph, nodes)
         
-        # Filter and reorder the original items based on the topological order
-        ordered_items = []
-        key_to_item = {item.strip('"').split(':')[0]: item for item in items}
-        for key in ordered_keys:
-            if key in key_to_item:
-                ordered_items.append(key_to_item[key])
+        # Check if any of the mapped items contain .nuspec
+        has_nuspec = any('.nuspec' in package_map[key] for key in ordered_keys if key in package_map)
         
-        # Output the ordered array using environment file
+        # Output the results using environment file
         with open(os.environ['GITHUB_OUTPUT'], 'a') as f:
-            f.write(f'ordered_changes=[{",".join(ordered_items)}]')
+            # Output the simple ordered keys
+            f.write(f'ordered_changes=[{",".join(ordered_keys)}]\n')
+            # Output the nuspec flag
+            f.write(f'has_nuspec={str(has_nuspec).lower()}\n')
         EOF
 
     - name: Get PR Comments
@@ -163,12 +186,17 @@ jobs:
         import sys
         import os
         import glob
+        import json
 
         def debug_log(message, data=None):
             print(f"\n=== DEBUG: {message} ===")
             if data is not None:
                 print(f"Data: {repr(data)}")
             print("=" * (len(message) + 16))
+
+        def load_package_map():
+            with open('package_map.json', 'r') as f:
+                return json.load(f)
 
         # Register the namespace to avoid ns0 prefix
         ET.register_namespace('', 'http://schemas.microsoft.com/packaging/2010/07/nuspec.xsd')
@@ -299,6 +327,9 @@ jobs:
             else:
                 return f"{major}.{minor}.{patch + 1}"
 
+        # Load package mapping
+        package_map = load_package_map()
+
         # Process the changes
         changes = '${{ steps.order.outputs.ordered_changes }}'
         pr_comments = '''${{ steps.pr_comment.outputs.result }}'''
@@ -310,19 +341,16 @@ jobs:
             debug_log("No changes to process")
             sys.exit(0)
 
-        # Remove brackets and split into items
-        items = [item.strip() for item in changes.strip('[]').split(',')]
+        # Remove brackets and split into items and map to full information
+        items = [package_map[key.strip()] for key in changes.strip('[]').split(',')]
         debug_log("Parsed change items", items)
         
         # First pass: Calculate all new versions for changed libraries
         version_updates = {}
         for item in items:
             try:
-                parts = item.strip('"').split(':')
-                debug_log("Processing item parts", parts)
-                
-                key = parts[0]
-                file_path = parts[1]
+                key = item['key']
+                file_path = item['file_path']
                 
                 # Get current version
                 current_version = get_version_from_file(file_path)
@@ -372,7 +400,7 @@ jobs:
         
         # Write output to environment file
         with open(os.environ['GITHUB_OUTPUT'], 'a') as f:
-            f.write(f'version_changes={";".join(version_changes)}')
+            f.write(f'version_changes={";".join(version_changes)}\n')
         EOF
 
     - name: Commit Version Updates
@@ -452,42 +480,58 @@ jobs:
         dotnet nuget list source
 
     - name: Setup NuGet
-      if: contains(steps.order.outputs.ordered_changes, '.nuspec')
+      if: steps.order.outputs.has_nuspec == 'true'
       uses: NuGet/setup-nuget@v2
       with:
         nuget-version: '6.x'
 
-    - name: Restore NuGet Dependencies
-      if: contains(steps.order.outputs.ordered_changes, '.nuspec')
+    - name: Create Transform Script
       shell: bash
       run: |
-        # Process ordered changes to find .nuspec files and their directories
-        changes="${{ steps.order.outputs.ordered_changes }}"
+        cat > transform.py << 'EOF'
+        import json
+        import sys
+
+        def transform_keys(ordered_keys, package_map_path):
+            with open(package_map_path, 'r') as f:
+                package_map = json.load(f)
+            
+            keys = ordered_keys.strip('[]').split(',')
+            full_info = [package_map[key.strip()] for key in keys if key.strip()]
+            return f"[{','.join(full_info)}]"
+
+        if __name__ == '__main__':
+            if len(sys.argv) != 3:
+                print('Usage: transform.py <ordered_keys> <package_map_path>')
+                sys.exit(1)
+            
+            ordered_keys = sys.argv[1]
+            package_map_path = sys.argv[2]
+            print(transform_keys(ordered_keys, package_map_path))
+        EOF
+
+    - name: Restore NuGet Dependencies
+      if: steps.order.outputs.has_nuspec == 'true'
+      shell: bash
+      run: |
+        ordered_keys="${{ steps.order.outputs.ordered_changes }}"
+        changes=$(python3 transform.py "$ordered_keys" "package_map.json")
         
-        # Create an array to store unique solution files
         declare -A processed_solutions
         
         echo "$changes" | sed 's/^\[\|\]$//g' | sed 's/"//g' | tr ',' '\n' | while read -r item; do
-          # Trim whitespace
           item=$(echo "$item" | sed 's/^[[:space:]]*//;s/[[:space:]]*$//')
           if [ ! -z "$item" ]; then
-            # Extract path
             path=$(echo "$item" | cut -d':' -f2)
             if [[ $path == *.nuspec ]]; then
               dir=$(dirname "$path")
               echo "Processing directory $dir for NuGet restore"
               
-              # Check for solution files and restore each one found
               for sln in "$dir"/*.sln; do
-                if [ -f "$sln" ]; then
-                  # Use the full path as the key to ensure uniqueness
-                  if [ -z "${processed_solutions[$sln]}" ]; then
-                    echo "Found solution file $sln, running nuget restore"
-                    nuget restore "$sln"
-                    processed_solutions[$sln]=1
-                  else
-                    echo "Solution $sln has already been processed, skipping..."
-                  fi
+                if [ -f "$sln" ] && [ -z "${processed_solutions[$sln]}" ]; then
+                  echo "Found solution file $sln, running nuget restore"
+                  nuget restore "$sln"
+                  processed_solutions[$sln]=1
                 fi
               done
             fi
@@ -497,8 +541,9 @@ jobs:
     - name: Build and Pack NuGet Packages
       shell: bash
       run: |
-        # Process ordered changes
-        changes="${{ steps.order.outputs.ordered_changes }}"
+        ordered_keys="${{ steps.order.outputs.ordered_changes }}"
+        changes=$(python3 transform.py "$ordered_keys" "package_map.json")
+        
         if [ "$changes" = "[]" ]; then
           echo "No libraries to build and pack"
           exit 0
@@ -507,12 +552,9 @@ jobs:
         # Create nupkg directory
         mkdir -p ${{ env.OUTPUT_DIR }}
 
-        # Remove outer brackets and quotes, and process each item in order
         echo "$changes" | sed 's/^\[\|\]$//g' | sed 's/"//g' | tr ',' '\n' | while read -r item; do
-          # Trim whitespace
           item=$(echo "$item" | sed 's/^[[:space:]]*//;s/[[:space:]]*$//')
           if [ ! -z "$item" ]; then
-            # Extract path
             path=$(echo "$item" | cut -d':' -f2)
             echo "Processing $path"
 
@@ -524,7 +566,6 @@ jobs:
               dotnet build "$path" -c ${{ env.CONFIGURATION }} -p:UseNuGetReferences=true --no-restore
               dotnet pack "$path" -c ${{ env.CONFIGURATION }} --no-build -o ${{ env.OUTPUT_DIR }}
               
-              # Get the package name from the most recently created package
               pkg=$(ls -t ${{ env.OUTPUT_DIR }}/*.nupkg | head -n1)
               if [ -f "$pkg" ]; then
                 echo "Publishing $pkg to ${{ env.GITHUB_PACKAGES_URL }}"
@@ -536,13 +577,9 @@ jobs:
               fi
             elif [[ $path == *.nuspec ]]; then
               echo "Building and packing $path"
-              # Get directory and name from the nuspec file path
               dir=$(dirname "$path")
               name=$(basename "$path" .nuspec)
               
-              # First restore all dependencies
-              echo "Looking for .csproj files to restore in $dir"
-              # Try to restore the matching .csproj if it exists
               if [ -f "$dir/$name.csproj" ]; then
                 echo "Restoring dependencies for $dir/$name.csproj"
                 dotnet restore "$dir/$name.csproj" --force-evaluate -p:UseNuGetReferences=true
@@ -550,8 +587,6 @@ jobs:
                 echo "Building matching $dir/$name.csproj"
                 dotnet build "$dir/$name.csproj" -c ${{ env.CONFIGURATION }} -p:UseNuGetReferences=true --no-restore
               else
-                echo "No matching .csproj found, looking for other .csproj files in $dir"
-                # Fall back to restoring all .csproj files in the directory
                 for csproj in "$dir"/*.csproj; do
                   if [ -f "$csproj" ]; then
                     echo "Restoring dependencies for $csproj"
@@ -566,7 +601,6 @@ jobs:
               echo "Packing $path"
               nuget pack "$path" -OutputDirectory ${{ env.OUTPUT_DIR }}
               
-              # Get the package name from the most recently created package
               pkg=$(ls -t ${{ env.OUTPUT_DIR }}/*.nupkg | head -n1)
               if [ -f "$pkg" ]; then
                 echo "Publishing $pkg to ${{ env.GITHUB_PACKAGES_URL }}"
@@ -694,10 +728,10 @@ jobs:
       id: print_changes
       shell: bash
       run: |
-        # Create a temporary file to store the output
         output_file=$(mktemp)
+        ordered_keys="${{ steps.order.outputs.ordered_changes }}"
+        changes=$(python3 transform.py "$ordered_keys" "package_map.json")
         
-        changes="${{ steps.order.outputs.ordered_changes }}"
         if [ "$changes" = "[]" ]; then
           echo "No libraries were changed" | tee "$output_file"
         else
@@ -705,21 +739,15 @@ jobs:
             echo "# Changes Summary"
             echo ""
             echo "## Changed Libraries"
-            # Remove outer brackets and quotes
             filtered_changes=$(echo "$changes" | sed 's/^\[\|\]$//g' | sed 's/"//g')
             
-            # Process each item
             echo "$filtered_changes" | tr ',' '\n' | while read -r item; do
-              # Trim leading/trailing whitespace
               item=$(echo "$item" | sed 's/^[[:space:]]*//;s/[[:space:]]*$//')
               if [ ! -z "$item" ]; then
-                # Extract each part using exact positions
                 key=$(echo "$item" | cut -d':' -f1)
                 path=$(echo "$item" | cut -d':' -f2)
                 deps=$(echo "$item" | cut -d':' -f3)
-                # Extract file extension without the dot
                 ext=$(echo "$path" | grep -o '\.[^.]*$' | sed 's/\.//' || echo "no extension")
-                # Only output if we have a valid key
                 if [ ! -z "$key" ]; then
                   echo "* Package $key"
                   echo "  * Path: \\\`$path\\\`"
@@ -743,7 +771,6 @@ jobs:
 
             echo ""
             echo "## Created Tags"
-            # Use the actual created tags from the previous step
             echo "${{ steps.tags.outputs.tags }}" | while read -r tag; do
               if [ ! -z "$tag" ]; then
                 echo "* \\\`$tag\\\`"
@@ -759,13 +786,9 @@ jobs:
           } | tee "$output_file"
         fi
 
-        # Store the output as a step output (escape newlines for GitHub Actions)
-        output_content=$(cat "$output_file")
         echo "summary<<EOF" >> $GITHUB_OUTPUT
-        echo "$output_content" >> $GITHUB_OUTPUT
+        cat "$output_file" >> $GITHUB_OUTPUT
         echo "EOF" >> $GITHUB_OUTPUT
-
-        # Clean up
         rm -f "$output_file"
 
     - name: Add Changes Summary Comment
