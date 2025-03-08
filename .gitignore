@@ -58,4 +58,4 @@ nupkg/
 # IDE
 .idea/
 .vscode/
-*.sln.iml 
+*.sln.iml scripts/
