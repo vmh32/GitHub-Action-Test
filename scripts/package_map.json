@@ -1,0 +1,6 @@
+{
+  "A": "A:LibraryA/LibraryA.csproj:B+C",
+  "B": "B:LibraryB/LibraryB.csproj:C",
+  "C": "C:LibraryC/LibraryC.csproj:",
+  "D": "D:LibraryD/LibraryD.nuspec:"
+}
