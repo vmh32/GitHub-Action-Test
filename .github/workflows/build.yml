@@ -50,8 +50,9 @@ jobs:
       id: package_map
       shell: bash
       run: |
-        # Create package mapping file
-        cat > package_map.json << 'EOF'
+        # Create package mapping file in a persistent location
+        mkdir -p scripts
+        cat > scripts/package_map.json << 'EOF'
         {
           "A": "A:LibraryA/LibraryA.csproj:B+C",
           "B": "B:LibraryB/LibraryB.csproj:C",
@@ -60,6 +61,7 @@ jobs:
         }
         EOF
         echo "Created package mapping file"
+        echo "path=scripts/package_map.json" >> $GITHUB_OUTPUT
 
     - name: Detect Changed Packages
       id: filter
@@ -86,7 +88,7 @@ jobs:
         from collections import defaultdict
 
         def load_package_map():
-            with open('package_map.json', 'r') as f:
+            with open('scripts/package_map.json', 'r') as f:
                 return json.load(f)
 
         def create_graph(items, package_map):
@@ -195,7 +197,7 @@ jobs:
             print("=" * (len(message) + 16))
 
         def load_package_map():
-            with open('package_map.json', 'r') as f:
+            with open('scripts/package_map.json', 'r') as f:
                 return json.load(f)
 
         # Register the namespace to avoid ns0 prefix
@@ -412,8 +414,17 @@ jobs:
         git config --local user.email "${{ env.GIT_USER_EMAIL }}"
         git config --local user.name "${{ env.GIT_USER_NAME }}"
         
-        # Make sure the working directory is clean
-        git clean -fd
+        # Create .gitignore if it doesn't exist
+        if [ ! -f .gitignore ]; then
+            echo "scripts/" > .gitignore
+        else
+            if ! grep -q "^scripts/$" .gitignore; then
+                echo "scripts/" >> .gitignore
+            fi
+        fi
+        
+        # Make sure the working directory is clean, but preserve scripts
+        git clean -fd -e scripts/
         
         # Add and commit changes
         git add -A
@@ -435,7 +446,7 @@ jobs:
             break
           else
             echo "Push failed, cleaning and retrying..."
-            git clean -fd
+            git clean -fd -e scripts/
             git reset --hard HEAD
             git pull --rebase
             ((attempt++))
@@ -522,10 +533,8 @@ jobs:
       if: steps.order.outputs.has_nuspec == 'true'
       shell: bash
       run: |
-        # Get absolute path to package_map.json
-        package_map_path="$(pwd)/package_map.json"
         ordered_keys="${{ steps.order.outputs.ordered_changes }}"
-        changes=$(python3 scripts/transform.py "$ordered_keys" "$package_map_path")
+        changes=$(python3 scripts/transform.py "$ordered_keys" "scripts/package_map.json")
         
         declare -A processed_solutions
         
@@ -551,10 +560,8 @@ jobs:
     - name: Build and Pack NuGet Packages
       shell: bash
       run: |
-        # Get absolute path to package_map.json
-        package_map_path="$(pwd)/package_map.json"
         ordered_keys="${{ steps.order.outputs.ordered_changes }}"
-        changes=$(python3 scripts/transform.py "$ordered_keys" "$package_map_path")
+        changes=$(python3 scripts/transform.py "$ordered_keys" "scripts/package_map.json")
         
         if [ "$changes" = "[]" ]; then
           echo "No libraries to build and pack"
@@ -635,8 +642,8 @@ jobs:
         git config --local user.email "${{ env.GIT_USER_EMAIL }}"
         git config --local user.name "${{ env.GIT_USER_NAME }}"
         
-        # Clean state before creating tags
-        git clean -fd
+        # Clean state before creating tags, but preserve scripts
+        git clean -fd -e scripts/
         git reset --hard HEAD
 
         # Create a temporary file to store processed tags
@@ -740,11 +747,9 @@ jobs:
       id: print_changes
       shell: bash
       run: |
-        # Get absolute path to package_map.json
-        package_map_path="$(pwd)/package_map.json"
         output_file=$(mktemp)
         ordered_keys="${{ steps.order.outputs.ordered_changes }}"
-        changes=$(python3 scripts/transform.py "$ordered_keys" "$package_map_path")
+        changes=$(python3 scripts/transform.py "$ordered_keys" "scripts/package_map.json")
         
         if [ "$changes" = "[]" ]; then
           echo "No libraries were changed" | tee "$output_file"
