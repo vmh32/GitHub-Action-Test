@@ -54,10 +54,10 @@ jobs:
         mkdir -p scripts
         cat > scripts/package_map.json << 'EOF'
         {
-          "A": "A:LibraryA/LibraryA.csproj:B+C",
-          "B": "B:LibraryB/LibraryB.csproj:C",
-          "C": "C:LibraryC/LibraryC.csproj:",
-          "D": "D:LibraryD/LibraryD.nuspec:"
+          "X1": "LibraryA:LibraryA/LibraryA.csproj:X2+X3",
+          "X2": "LibraryB:LibraryB/LibraryB.csproj:X3",
+          "X3": "LibraryC:LibraryC/LibraryC.csproj:",
+          "X4": "LibraryD:LibraryD/LibraryD.nuspec:"
         }
         EOF
         echo "Created package mapping file"
@@ -68,13 +68,13 @@ jobs:
       uses: dorny/paths-filter@v3
       with:
         filters: |
-          A:
+          X1:
             - 'LibraryA/**'
-          B:
+          X2:
             - 'LibraryB/**'
-          C:
+          X3:
             - 'LibraryC/**'
-          D:
+          X4:
             - 'LibraryD/**'
 
     - name: Order Dependencies
@@ -103,13 +103,12 @@ jobs:
                     deps = parts[2].split('+') if parts[2] else []
                     nodes.add(key)
                     for dep in deps:
-                        if dep:
+                        if dep and dep in package_map:  # Only add dependency if it's a valid key
                             graph[key].append(dep)
                             nodes.add(dep)
             return graph, nodes
 
         def topological_sort(graph, nodes):
-            # Track visited nodes and detect cycles
             visited = set()
             temp = set()
             order = []
@@ -125,7 +124,6 @@ jobs:
                     visited.add(node)
                     order.append(node)
             
-            # Visit each node
             for node in nodes:
                 if node not in visited:
                     visit(node)
@@ -157,9 +155,7 @@ jobs:
         
         # Output the results using environment file
         with open(os.environ['GITHUB_OUTPUT'], 'a') as f:
-            # Output the simple ordered keys
             f.write(f'ordered_changes=[{",".join(ordered_keys)}]\n')
-            # Output the nuspec flag
             f.write(f'has_nuspec={str(has_nuspec).lower()}\n')
         EOF
 
@@ -352,17 +348,17 @@ jobs:
         for item in items:
             try:
                 parts = item.split(':')
-                key = parts[0]
+                library_id = parts[0]  # This is now the library identifier, not the key
                 file_path = parts[1]
                 
                 # Get current version
                 current_version = get_version_from_file(file_path)
                 
-                # Calculate new version
-                new_version = calculate_new_version(current_version, key, pr_comments)
+                # Calculate new version using library identifier
+                new_version = calculate_new_version(current_version, library_id, pr_comments)
                 
-                # Store for later use
-                version_updates[key] = {
+                # Store for later use, using library identifier
+                version_updates[library_id] = {
                     'file_path': file_path,
                     'new_version': new_version,
                     'current_version': current_version
