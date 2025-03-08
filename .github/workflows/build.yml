@@ -54,8 +54,8 @@ jobs:
         mkdir -p scripts
         cat > scripts/package_map.json << 'EOF'
         {
-          "X1": "LibraryA:LibraryA/LibraryA.csproj:X2+X3",
-          "X2": "LibraryB:LibraryB/LibraryB.csproj:X3",
+          "X1": "LibraryA:LibraryA/LibraryA.csproj:LibraryB+LibraryC",
+          "X2": "LibraryB:LibraryB/LibraryB.csproj:LibraryC",
           "X3": "LibraryC:LibraryC/LibraryC.csproj:",
           "X4": "LibraryD:LibraryD/LibraryD.nuspec:"
         }
@@ -95,6 +95,12 @@ jobs:
             graph = defaultdict(list)
             nodes = set()
             
+            # Create reverse mapping from library id to key
+            lib_to_key = {}
+            for key, value in package_map.items():
+                lib_id = value.split(':')[0]
+                lib_to_key[lib_id] = key
+            
             # Parse the items and build the graph
             for item in items:
                 key = item.strip('"')
@@ -103,9 +109,11 @@ jobs:
                     deps = parts[2].split('+') if parts[2] else []
                     nodes.add(key)
                     for dep in deps:
-                        if dep and dep in package_map:  # Only add dependency if it's a valid key
-                            graph[key].append(dep)
-                            nodes.add(dep)
+                        if dep and dep in lib_to_key:  # Check if the library id has a corresponding key
+                            dep_key = lib_to_key[dep]
+                            if dep_key in package_map:  # Verify the key exists in package_map
+                                graph[key].append(dep_key)
+                                nodes.add(dep_key)
             return graph, nodes
 
         def topological_sort(graph, nodes):
