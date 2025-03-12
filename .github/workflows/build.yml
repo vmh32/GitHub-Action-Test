@@ -550,9 +550,21 @@ jobs:
               dir=$(dirname "$path")
               echo "Processing directory $dir for NuGet restore"
               
+              # Look for solution files in the current directory
               for sln in "$dir"/*.sln; do
                 if [ -f "$sln" ] && [ -z "${processed_solutions[$sln]}" ]; then
-                  echo "Found solution file $sln, running nuget restore"
+                  echo "Found solution file $sln in package directory, running nuget restore"
+                  nuget restore "$sln"
+                  processed_solutions[$sln]=1
+                fi
+              done
+              
+              # Look for solution files in the parent directory
+              parent_dir=$(dirname "$dir")
+              echo "Looking for solutions in parent directory $parent_dir"
+              for sln in "$parent_dir"/*.sln; do
+                if [ -f "$sln" ] && [ -z "${processed_solutions[$sln]}" ]; then
+                  echo "Found solution file $sln in parent directory, running nuget restore"
                   nuget restore "$sln"
                   processed_solutions[$sln]=1
                 fi
