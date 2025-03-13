@@ -146,14 +146,15 @@ jobs:
         if changes == '[]':
             with open(os.environ['GITHUB_OUTPUT'], 'a') as f:
                 f.write('ordered_changes=[]\n')
+                f.write('modified_packages=[]\n')
                 f.write('has_nuspec=false\n')
             sys.exit(0)
 
         # Remove brackets and split into items
-        items = [item.strip() for item in changes.strip('[]').split(',')]
+        modified_packages = [item.strip() for item in changes.strip('[]').split(',')]
         
         # Create dependency graph
-        graph, nodes = create_graph(items, package_map)
+        graph, nodes = create_graph(modified_packages, package_map)
         
         # Get topological order
         ordered_keys = topological_sort(graph, nodes)
@@ -164,6 +165,7 @@ jobs:
         # Output the results using environment file
         with open(os.environ['GITHUB_OUTPUT'], 'a') as f:
             f.write(f'ordered_changes=[{",".join(ordered_keys)}]\n')
+            f.write(f'modified_packages=[{",".join(modified_packages)}]\n')
             f.write(f'has_nuspec={str(has_nuspec).lower()}\n')
         EOF
 
@@ -336,20 +338,22 @@ jobs:
         # Load package mapping
         package_map = load_package_map()
 
-        # Process the changes
-        changes = '${{ steps.order.outputs.ordered_changes }}'
+        # Process only the modified packages
+        modified_packages = '${{ steps.order.outputs.modified_packages }}'
+        ordered_changes = '${{ steps.order.outputs.ordered_changes }}'  # Used for dependency order only
         pr_comments = '''${{ steps.pr_comment.outputs.result }}'''
 
-        debug_log("Processing ordered changes", changes)
+        debug_log("Processing modified packages", modified_packages)
+        debug_log("Build order", ordered_changes)
         debug_log("PR comments", pr_comments)
 
-        if changes == '[]':
+        if modified_packages == '[]':
             debug_log("No changes to process")
             sys.exit(0)
 
         # Remove brackets and split into items and map to full information
-        items = [package_map[key.strip()] for key in changes.strip('[]').split(',')]
-        debug_log("Parsed change items", items)
+        items = [package_map[key.strip()] for key in modified_packages.strip('[]').split(',')]
+        debug_log("Parsed modified items", items)
         
         # First pass: Calculate all new versions for changed libraries
         version_updates = {}
