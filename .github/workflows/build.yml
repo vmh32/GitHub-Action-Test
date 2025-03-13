@@ -789,16 +789,18 @@ jobs:
       run: |
         output_file=$(mktemp)
         ordered_keys="${{ steps.order.outputs.ordered_changes }}"
+        modified_packages="${{ steps.order.outputs.modified_packages }}"
         changes=$(python3 scripts/transform.py "$ordered_keys" "scripts/package_map.json")
+        modified_changes=$(python3 scripts/transform.py "$modified_packages" "scripts/package_map.json")
         
-        if [ "$changes" = "[]" ]; then
+        if [ "$modified_changes" = "[]" ]; then
           echo "No libraries were changed" | tee "$output_file"
         else
           {
             echo "# Changes Summary"
             echo ""
             echo "## Changed Libraries"
-            filtered_changes=$(echo "$changes" | sed 's/^\[\|\]$//g' | sed 's/"//g')
+            filtered_changes=$(echo "$modified_changes" | sed 's/^\[\|\]$//g' | sed 's/"//g')
             
             echo "$filtered_changes" | tr ',' '\n' | while read -r item; do
               item=$(echo "$item" | sed 's/^[[:space:]]*//;s/[[:space:]]*$//')
@@ -817,6 +819,21 @@ jobs:
               fi
             done
 
+            echo "## Build Order"
+            filtered_order=$(echo "$changes" | sed 's/^\[\|\]$//g' | sed 's/"//g')
+            echo "$filtered_order" | tr ',' '\n' | while read -r item; do
+              item=$(echo "$item" | sed 's/^[[:space:]]*//;s/[[:space:]]*$//')
+              if [ ! -z "$item" ]; then
+                key=$(echo "$item" | cut -d':' -f1)
+                path=$(echo "$item" | cut -d':' -f2)
+                deps=$(echo "$item" | cut -d':' -f3)
+                if [ ! -z "$key" ]; then
+                  echo "* $key (${deps:-no dependencies})"
+                fi
+              fi
+            done
+
+            echo ""
             echo "## Version Changes"
             if [ ! -z "${{ steps.versions.outputs.version_changes }}" ]; then
               echo "${{ steps.versions.outputs.version_changes }}" | tr ';' '\n' | while read -r change; do
