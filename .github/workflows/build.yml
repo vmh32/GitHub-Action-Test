@@ -818,22 +818,7 @@ jobs:
                 fi
               fi
             done
-
-            echo "## Build Order"
-            filtered_order=$(echo "$changes" | sed 's/^\[\|\]$//g' | sed 's/"//g')
-            echo "$filtered_order" | tr ',' '\n' | while read -r item; do
-              item=$(echo "$item" | sed 's/^[[:space:]]*//;s/[[:space:]]*$//')
-              if [ ! -z "$item" ]; then
-                key=$(echo "$item" | cut -d':' -f1)
-                path=$(echo "$item" | cut -d':' -f2)
-                deps=$(echo "$item" | cut -d':' -f3)
-                if [ ! -z "$key" ]; then
-                  echo "* $key (${deps:-no dependencies})"
-                fi
-              fi
-            done
-
-            echo ""
+            
             echo "## Version Changes"
             if [ ! -z "${{ steps.versions.outputs.version_changes }}" ]; then
               echo "${{ steps.versions.outputs.version_changes }}" | tr ';' '\n' | while read -r change; do
