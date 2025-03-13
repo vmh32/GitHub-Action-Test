@@ -1,13 +1,16 @@
-﻿<Project Sdk="Microsoft.NET.Sdk">
+<?xml version='1.0' encoding='utf-8'?>
+<Project Sdk="Microsoft.NET.Sdk">
 
   <PropertyGroup>
     <TargetFramework>net8.0</TargetFramework>
     <ImplicitUsings>enable</ImplicitUsings>
     <Nullable>enable</Nullable>
     
-    <!-- NuGet Package Information -->
+    
+    <UseNuGetReferences Condition="'$(UseNuGetReferences)' == ''">false</UseNuGetReferences>
+    
     <PackageId>LibraryA</PackageId>
-    <Version>1.0.0</Version>
+    <Version>2.0.1</Version>
     <Authors>Your Name</Authors>
     <Company>Your Company</Company>
     <Description>Description of LibraryA</Description>
@@ -19,8 +22,20 @@
     <RepositoryType>git</RepositoryType>
   </PropertyGroup>
 
+  
+  <ItemGroup Condition="'$(UseNuGetReferences)' == 'true'">
+    <PackageReference Include="LibraryB" Version="1.0.56" />
+    <PackageReference Include="LibraryC" Version="1.0.56" />
+  </ItemGroup>
+
+  
+  <ItemGroup Condition="'$(UseNuGetReferences)' != 'true'">
+    <ProjectReference Include="..\LibraryB\LibraryB.csproj" />
+    <ProjectReference Include="..\LibraryC\LibraryC.csproj" />
+  </ItemGroup>
+
   <ItemGroup>
-    <None Include="README.md" Pack="true" PackagePath="\"/>
+    <None Include="README.md" Pack="true" PackagePath="\" />
   </ItemGroup>
 
 </Project>

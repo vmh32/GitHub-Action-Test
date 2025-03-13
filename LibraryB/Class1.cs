@@ -1,7 +1,7 @@
 ﻿namespace LibraryB
 {
-    public class Class1
+    public class ClassB
     {
-        //           
+        // 62
     }
 }
