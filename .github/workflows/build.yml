@@ -150,8 +150,8 @@ jobs:
                 f.write('has_nuspec=false\n')
             sys.exit(0)
 
-        # Remove brackets and split into items
-        modified_packages = [item.strip() for item in changes.strip('[]').split(',')]
+        # Remove brackets and split into items, properly strip quotes
+        modified_packages = [item.strip().strip('"') for item in changes.strip('[]').split(',')]
         
         # Create dependency graph
         graph, nodes = create_graph(modified_packages, package_map)
@@ -351,8 +351,8 @@ jobs:
             debug_log("No changes to process")
             sys.exit(0)
 
-        # Remove brackets and split into items and map to full information
-        items = [package_map[key.strip()] for key in modified_packages.strip('[]').split(',')]
+        # Remove brackets and split into items and map to full information, properly strip quotes
+        items = [package_map[key.strip().strip('"')] for key in modified_packages.strip('[]').split(',')]
         debug_log("Parsed modified items", items)
         
         # First pass: Calculate all new versions for changed libraries
