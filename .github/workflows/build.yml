@@ -159,8 +159,8 @@ jobs:
         # Get topological order
         ordered_keys = topological_sort(graph, nodes)
         
-        # Check if any of the mapped items contain .nuspec
-        has_nuspec = any('.nuspec' in package_map[key] for key in ordered_keys if key in package_map)
+        # Check if any of the MODIFIED packages contain .nuspec
+        has_nuspec = any('.nuspec' in package_map[key] for key in modified_packages if key in package_map)
         
         # Output the results using environment file
         with open(os.environ['GITHUB_OUTPUT'], 'a') as f:
@@ -581,7 +581,9 @@ jobs:
       shell: bash
       run: |
         ordered_keys="${{ steps.order.outputs.ordered_changes }}"
+        modified_packages="${{ steps.order.outputs.modified_packages }}"
         changes=$(python3 scripts/transform.py "$ordered_keys" "scripts/package_map.json")
+        modified_changes=$(python3 scripts/transform.py "$modified_packages" "scripts/package_map.json")
         
         if [ "$changes" = "[]" ]; then
           echo "No libraries to build and pack"
@@ -591,64 +593,79 @@ jobs:
         # Create nupkg directory
         mkdir -p ${{ env.OUTPUT_DIR }}
 
+        # Convert modified_changes to an array for easy lookup
+        declare -A modified_set
+        echo "$modified_changes" | sed 's/^\[\|\]$//g' | sed 's/"//g' | tr ',' '\n' | while read -r item; do
+          item=$(echo "$item" | sed 's/^[[:space:]]*//;s/[[:space:]]*$//')
+          if [ ! -z "$item" ]; then
+            modified_set["$item"]=1
+          fi
+        done
+
+        # Process in dependency order, but only build/pack modified packages
         echo "$changes" | sed 's/^\[\|\]$//g' | sed 's/"//g' | tr ',' '\n' | while read -r item; do
           item=$(echo "$item" | sed 's/^[[:space:]]*//;s/[[:space:]]*$//')
           if [ ! -z "$item" ]; then
-            path=$(echo "$item" | cut -d':' -f2)
-            echo "Processing $path"
+            # Check if this item is in the modified set
+            if [ -n "${modified_set[$item]}" ]; then
+              path=$(echo "$item" | cut -d':' -f2)
+              echo "Processing modified package: $path"
 
-            if [[ $path == *.csproj ]]; then
-              echo "Restoring dependencies for $path"
-              dotnet restore "$path" --force-evaluate -p:UseNuGetReferences=true
-              
-              echo "Building and packing $path"
-              dotnet build "$path" -c ${{ env.CONFIGURATION }} -p:UseNuGetReferences=true --no-restore
-              dotnet pack "$path" -c ${{ env.CONFIGURATION }} --no-build -o ${{ env.OUTPUT_DIR }}
-              
-              pkg=$(ls -t ${{ env.OUTPUT_DIR }}/*.nupkg | head -n1)
-              if [ -f "$pkg" ]; then
-                echo "Publishing $pkg to ${{ env.GITHUB_PACKAGES_URL }}"
-                dotnet nuget push "$pkg" \
-                  --api-key "${{ secrets.GITHUB_TOKEN }}" \
-                  --source "${{ env.GITHUB_PACKAGES_URL }}" \
-                  --skip-duplicate \
-                  --no-symbols
-              fi
-            elif [[ $path == *.nuspec ]]; then
-              echo "Building and packing $path"
-              dir=$(dirname "$path")
-              name=$(basename "$path" .nuspec)
-              
-              if [ -f "$dir/$name.csproj" ]; then
-                echo "Restoring dependencies for $dir/$name.csproj"
-                dotnet restore "$dir/$name.csproj" --force-evaluate -p:UseNuGetReferences=true
+              if [[ $path == *.csproj ]]; then
+                echo "Restoring dependencies for $path"
+                dotnet restore "$path" --force-evaluate -p:UseNuGetReferences=true
                 
-                echo "Building matching $dir/$name.csproj"
-                dotnet build "$dir/$name.csproj" -c ${{ env.CONFIGURATION }} -p:UseNuGetReferences=true --no-restore
-              else
-                for csproj in "$dir"/*.csproj; do
-                  if [ -f "$csproj" ]; then
-                    echo "Restoring dependencies for $csproj"
-                    dotnet restore "$csproj" --force-evaluate -p:UseNuGetReferences=true
-                    
-                    echo "Building $csproj"
-                    dotnet build "$csproj" -c ${{ env.CONFIGURATION }} -p:UseNuGetReferences=true --no-restore
-                  fi
-                done
+                echo "Building and packing $path"
+                dotnet build "$path" -c ${{ env.CONFIGURATION }} -p:UseNuGetReferences=true --no-restore
+                dotnet pack "$path" -c ${{ env.CONFIGURATION }} --no-build -o ${{ env.OUTPUT_DIR }}
+                
+                pkg=$(ls -t ${{ env.OUTPUT_DIR }}/*.nupkg | head -n1)
+                if [ -f "$pkg" ]; then
+                  echo "Publishing $pkg to ${{ env.GITHUB_PACKAGES_URL }}"
+                  dotnet nuget push "$pkg" \
+                    --api-key "${{ secrets.GITHUB_TOKEN }}" \
+                    --source "${{ env.GITHUB_PACKAGES_URL }}" \
+                    --skip-duplicate \
+                    --no-symbols
+                fi
+              elif [[ $path == *.nuspec ]]; then
+                echo "Building and packing $path"
+                dir=$(dirname "$path")
+                name=$(basename "$path" .nuspec)
+                
+                if [ -f "$dir/$name.csproj" ]; then
+                  echo "Restoring dependencies for $dir/$name.csproj"
+                  dotnet restore "$dir/$name.csproj" --force-evaluate -p:UseNuGetReferences=true
+                  
+                  echo "Building matching $dir/$name.csproj"
+                  dotnet build "$dir/$name.csproj" -c ${{ env.CONFIGURATION }} -p:UseNuGetReferences=true --no-restore
+                else
+                  for csproj in "$dir"/*.csproj; do
+                    if [ -f "$csproj" ]; then
+                      echo "Restoring dependencies for $csproj"
+                      dotnet restore "$csproj" --force-evaluate -p:UseNuGetReferences=true
+                      
+                      echo "Building $csproj"
+                      dotnet build "$csproj" -c ${{ env.CONFIGURATION }} -p:UseNuGetReferences=true --no-restore
+                    fi
+                  done
+                fi
+                
+                echo "Packing $path"
+                nuget pack "$path" -OutputDirectory ${{ env.OUTPUT_DIR }}
+                
+                pkg=$(ls -t ${{ env.OUTPUT_DIR }}/*.nupkg | head -n1)
+                if [ -f "$pkg" ]; then
+                  echo "Publishing $pkg to ${{ env.GITHUB_PACKAGES_URL }}"
+                  dotnet nuget push "$pkg" \
+                    --api-key "${{ secrets.GITHUB_TOKEN }}" \
+                    --source "${{ env.GITHUB_PACKAGES_URL }}" \
+                    --skip-duplicate \
+                    --no-symbols
+                fi
               fi
-              
-              echo "Packing $path"
-              nuget pack "$path" -OutputDirectory ${{ env.OUTPUT_DIR }}
-              
-              pkg=$(ls -t ${{ env.OUTPUT_DIR }}/*.nupkg | head -n1)
-              if [ -f "$pkg" ]; then
-                echo "Publishing $pkg to ${{ env.GITHUB_PACKAGES_URL }}"
-                dotnet nuget push "$pkg" \
-                  --api-key "${{ secrets.GITHUB_TOKEN }}" \
-                  --source "${{ env.GITHUB_PACKAGES_URL }}" \
-                  --skip-duplicate \
-                  --no-symbols
-              fi
+            else
+              echo "Skipping unmodified package in dependency chain: $item"
             fi
           fi
         done
