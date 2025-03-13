@@ -1,85 +1,107 @@
-name: Build and Package
+name: 'NuGet Package Build and Release'
+description: 'Build and release NuGet packages with dependency management'
 
-on:
-  pull_request:
-    types: [reopened]
-    branches: [ main ]
-    paths:
-      - 'LibraryA/**'
-      - 'LibraryB/**'
-      - 'LibraryC/**'
-      - 'LibraryD/**'
+inputs:
+  projects:
+    description: 'Project configurations in JSON format'
+    required: true
+  dotnet_version:
+    description: '.NET version to use'
+    required: false
+    default: '8.0.x'
+  configuration:
+    description: 'Build configuration'
+    required: false
+    default: 'Release'
+  github_token:
+    description: 'GitHub token for package publishing'
+    required: true
 
-permissions:
-  contents: write
-  pull-requests: write
-  packages: write
+outputs:
+  changed_projects:
+    description: 'List of projects that were changed'
+    value: ${{ steps.order.outputs.modified_packages }}
+  version_changes:
+    description: 'Summary of version changes made'
+    value: ${{ steps.versions.outputs.version_changes }}
+  created_tags:
+    description: 'List of Git tags created'
+    value: ${{ steps.tags.outputs.tags }}
 
-jobs:
-  detect-and-build:
-    # Check if the branch name matches Release.#.#.#
-    if: startsWith(github.head_ref, 'Release.')
-    runs-on: windows-latest
-    env:
-      DOTNET_VERSION: '8.0.x'
-      GITHUB_PACKAGES_URL: https://nuget.pkg.github.com/${{ github.repository_owner }}/index.json
-      NUGET_AUTH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-      CONFIGURATION: Release
-      PR_BRANCH: ${{ github.head_ref }}
-      GIT_USER_EMAIL: "action@github.com"
-      GIT_USER_NAME: "GitHub Action"
-      OUTPUT_DIR: ./nupkg
-
-    steps:
-    - uses: actions/checkout@v4
+runs:
+  using: "composite"
+  steps:
+    - name: Setup Python
+      uses: actions/setup-python@v4
       with:
-        fetch-depth: 0
-        ref: ${{ env.PR_BRANCH }}
-        clean: true
+        python-version: '3.x'
 
-    - name: Validate Branch Name
-      shell: bash
-      id: validate
+    - name: Generate Configuration
+      id: config
+      shell: python
       run: |
-        if ! [[ ${{ env.PR_BRANCH }} =~ ^Release\.[0-9]+\.[0-9]+\.[0-9]+$ ]]; then
-          echo "Branch name must follow format Release.#.#.#"
-          exit 1
-        fi
+        import json
+        import os
+        import sys
+        from pathlib import Path
 
-    - name: Create Package Mapping
-      id: package_map
-      shell: bash
-      run: |
-        # Create package mapping file in a persistent location
-        mkdir -p scripts
-        cat > scripts/package_map.json << 'EOF'
-        {
-          "X1": "LibraryA:LibraryA/LibraryA.csproj:LibraryB+LibraryC",
-          "X2": "LibraryB:LibraryB/LibraryB.csproj:LibraryC",
-          "X3": "LibraryC:LibraryC/LibraryC.csproj:",
-          "X4": "LibraryD:LibraryD/LibraryD.nuspec:"
-        }
-        EOF
-        echo "Created package mapping file"
-        echo "path=scripts/package_map.json" >> $GITHUB_OUTPUT
+        def process_projects(projects_json):
+            projects = json.loads(projects_json)
+            
+            # Create package mapping
+            package_map = {}
+            filters = {}
+            
+            for idx, (project_id, config) in enumerate(projects.items(), 1):
+                key = f"X{idx}"
+                path = config['path']
+                patterns = config.get('patterns', [f"{project_id}/**"])
+                deps = config.get('dependencies', [])
+                
+                # Create package map entry
+                package_map[key] = f"{project_id}:{path}:{'+'.join(deps)}"
+                
+                # Create filter entry
+                filters[key] = patterns
+            
+            return package_map, filters
+
+        def main():
+            # Get input
+            projects_json = os.environ['INPUT_PROJECTS']
+            
+            # Process projects
+            package_map, filters = process_projects(projects_json)
+            
+            # Ensure scripts directory exists
+            Path('scripts').mkdir(exist_ok=True)
+            
+            # Write package map
+            with open('scripts/package_map.json', 'w') as f:
+                json.dump(package_map, f, indent=2)
+            
+            # Output filters in YAML format
+            filters_yaml = ""
+            for key, patterns in filters.items():
+                filters_yaml += f"      {key}:\n"
+                for pattern in patterns:
+                    filters_yaml += f"        - '{pattern}'\n"
+            
+            print(f"::set-output name=filters::{filters_yaml}")
+
+        if __name__ == '__main__':
+            main()
 
     - name: Detect Changed Packages
       id: filter
       uses: dorny/paths-filter@v3
       with:
         filters: |
-          X1:
-            - 'LibraryA/**'
-          X2:
-            - 'LibraryB/**'
-          X3:
-            - 'LibraryC/**'
-          X4:
-            - 'LibraryD/**'
+${{ steps.config.outputs.filters }}
 
     - name: Order Dependencies
-      shell: bash
       id: order
+      shell: bash
       run: |
         python3 - << 'EOF'
         import json
@@ -109,9 +131,9 @@ jobs:
                     deps = parts[2].split('+') if parts[2] else []
                     nodes.add(key)
                     for dep in deps:
-                        if dep and dep in lib_to_key:  # Check if the library id has a corresponding key
+                        if dep and dep in lib_to_key:
                             dep_key = lib_to_key[dep]
-                            if dep_key in package_map:  # Verify the key exists in package_map
+                            if dep_key in package_map:
                                 graph[key].append(dep_key)
                                 nodes.add(dep_key)
             return graph, nodes
@@ -150,7 +172,7 @@ jobs:
                 f.write('has_nuspec=false\n')
             sys.exit(0)
 
-        # Remove brackets and split into items, properly strip quotes
+        # Remove brackets and split into items
         modified_packages = [item.strip().strip('"') for item in changes.strip('[]').split(',')]
         
         # Create dependency graph
@@ -162,12 +184,15 @@ jobs:
         # Check if any of the MODIFIED packages contain .nuspec
         has_nuspec = any('.nuspec' in package_map[key] for key in modified_packages if key in package_map)
         
-        # Output the results using environment file
+        # Output the results
         with open(os.environ['GITHUB_OUTPUT'], 'a') as f:
             f.write(f'ordered_changes=[{",".join(ordered_keys)}]\n')
             f.write(f'modified_packages=[{",".join(modified_packages)}]\n')
             f.write(f'has_nuspec={str(has_nuspec).lower()}\n')
         EOF
+
+    # Rest of the existing steps from build.yml...
+    # (Version updates, commit changes, setup .NET, etc.) 
 
     - name: Get PR Comments
       id: pr_comment
@@ -818,7 +843,7 @@ jobs:
                 fi
               fi
             done
-
+            
             echo "## Version Changes"
             if [ ! -z "${{ steps.versions.outputs.version_changes }}" ]; then
               echo "${{ steps.versions.outputs.version_changes }}" | tr ';' '\n' | while read -r change; do

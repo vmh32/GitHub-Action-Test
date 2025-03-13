@@ -1,0 +1,49 @@
+name: Build and Package Example
+
+on:
+  pull_request:
+    types: [opened]
+    branches: [ main ]
+
+permissions:
+  contents: write
+  pull-requests: write
+  packages: write
+
+jobs:
+  build-packages:
+    if: startsWith(github.head_ref, 'Release.')
+    runs-on: windows-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+          ref: ${{ github.head_ref }}
+          clean: true
+
+      - uses: ./
+        with:
+          projects: |
+            {
+              "LibraryA": {
+                "path": "LibraryA/LibraryA.csproj",
+                "patterns": ["LibraryA/**"],
+                "dependencies": ["LibraryB", "LibraryC"]
+              },
+              "LibraryB": {
+                "path": "LibraryB/LibraryB.csproj",
+                "patterns": ["LibraryB/**"],
+                "dependencies": ["LibraryC"]
+              },
+              "LibraryC": {
+                "path": "LibraryC/LibraryC.csproj",
+                "patterns": ["LibraryC/**"],
+                "dependencies": []
+              },
+              "LibraryD": {
+                "path": "LibraryD/LibraryD.nuspec",
+                "patterns": ["LibraryD/**"],
+                "dependencies": []
+              }
+            }
+          github_token: ${{ secrets.GITHUB_TOKEN }} 
