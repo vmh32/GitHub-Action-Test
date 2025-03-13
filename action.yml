@@ -16,6 +16,14 @@ inputs:
   github_token:
     description: 'GitHub token for package publishing'
     required: true
+  git_user_email:
+    description: 'Git user email for commits'
+    required: false
+    default: 'action@github.com'
+  git_user_name:
+    description: 'Git user name for commits'
+    required: false
+    default: 'GitHub Action'
 
 outputs:
   changed_projects:
@@ -31,6 +39,18 @@ outputs:
 runs:
   using: "composite"
   steps:
+    - name: Setup Environment
+      shell: bash
+      run: |
+        echo "DOTNET_VERSION=${{ inputs.dotnet_version }}" >> $GITHUB_ENV
+        echo "GITHUB_PACKAGES_URL=https://nuget.pkg.github.com/${{ github.repository_owner }}/index.json" >> $GITHUB_ENV
+        echo "NUGET_AUTH_TOKEN=${{ inputs.github_token }}" >> $GITHUB_ENV
+        echo "CONFIGURATION=${{ inputs.configuration }}" >> $GITHUB_ENV
+        echo "PR_BRANCH=${{ github.head_ref }}" >> $GITHUB_ENV
+        echo "GIT_USER_EMAIL=${{ inputs.git_user_email }}" >> $GITHUB_ENV
+        echo "GIT_USER_NAME=${{ inputs.git_user_name }}" >> $GITHUB_ENV
+        echo "OUTPUT_DIR=./nupkg" >> $GITHUB_ENV
+
     - name: Setup Python
       uses: actions/setup-python@v4
       with:
