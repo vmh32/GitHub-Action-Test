@@ -10,7 +10,7 @@
     <UseNuGetReferences Condition="'$(UseNuGetReferences)' == ''">false</UseNuGetReferences>
     
     <PackageId>LibraryB</PackageId>
-    <Version>1.1.2</Version>
+    <Version>1.1.3</Version>
     <Authors>Your Name</Authors>
     <Company>Your Company</Company>
     <Description>Description of LibraryB</Description>
