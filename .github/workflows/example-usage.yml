@@ -4,11 +4,6 @@ on:
   pull_request:
     types: [opened, reopened]
     branches: [ main ]
-    paths:
-      - 'LibraryA/**'
-      - 'LibraryB/**'
-      - 'LibraryC/**'
-      - 'LibraryD/**'
 
 permissions:
   contents: write

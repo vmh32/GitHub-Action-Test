@@ -100,14 +100,16 @@ runs:
             with open('scripts/package_map.json', 'w') as f:
                 json.dump(package_map, f, indent=2)
             
-            # Output filters in YAML format
-            filters_yaml = ""
+            # Generate filters YAML
+            filters_yaml = "filters: |\n"
             for key, patterns in filters.items():
-                filters_yaml += f"      {key}:\n"
+                filters_yaml += f"  {key}:\n"
                 for pattern in patterns:
-                    filters_yaml += f"        - '{pattern}'\n"
+                    filters_yaml += f"    - '{pattern}'\n"
             
-            print(f"::set-output name=filters::{filters_yaml}")
+            # Write to GITHUB_OUTPUT
+            with open(os.environ['GITHUB_OUTPUT'], 'a') as f:
+                f.write(filters_yaml)
 
         if __name__ == '__main__':
             main()
@@ -115,9 +117,7 @@ runs:
     - name: Detect Changed Packages
       id: filter
       uses: dorny/paths-filter@v3
-      with:
-        filters: |
-${{ steps.config.outputs.filters }}
+      with: ${{ fromJSON(steps.config.outputs.filters) }}
 
     - name: Order Dependencies
       id: order
