@@ -4,12 +4,7 @@ on:
   pull_request:
     types: [opened, reopened, synchronize, edited]
     branches: [ main ]
-    paths:
-      - 'LibraryA/**'
-      - 'LibraryB/**'
-      - 'LibraryC/**'
-      - 'LibraryD/**'
-      - '.github/workflows/**'
+
 
 permissions:
   contents: write
