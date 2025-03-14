@@ -1,0 +1,65 @@
+name: Build and Package Example (Old)
+
+on:
+  workflow_dispatch:
+  # Disabled triggers
+  # pull_request:
+  #   types: [opened, reopened, synchronize, edited]
+  #   branches: [ main ]
+
+permissions:
+  contents: write
+  pull-requests: write
+  packages: write
+
+jobs:
+  build-packages:
+    if: startsWith(github.head_ref, 'Release.')
+    runs-on: windows-latest
+    env:
+      GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+          ref: ${{ github.head_ref }}
+          clean: true
+          token: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Debug Info
+        run: |
+          echo "Branch: ${{ github.head_ref }}"
+          echo "Event: ${{ github.event_name }}"
+          echo "Action: ${{ github.action }}"
+          echo "Ref: ${{ github.ref }}"
+
+      - uses: ./
+        with:
+          projects: |
+            {
+              "LibraryA": {
+                "path": "LibraryA/LibraryA.csproj",
+                "patterns": ["LibraryA/**"],
+                "dependencies": ["LibraryB", "LibraryC"]
+              },
+              "LibraryB": {
+                "path": "LibraryB/LibraryB.csproj",
+                "patterns": ["LibraryB/**"],
+                "dependencies": ["LibraryC"]
+              },
+              "LibraryC": {
+                "path": "LibraryC/LibraryC.csproj",
+                "patterns": ["LibraryC/**"],
+                "dependencies": []
+              },
+              "LibraryD": {
+                "path": "LibraryD/LibraryD.nuspec",
+                "patterns": ["LibraryD/**"],
+                "dependencies": []
+              }
+            }
+          github_token: ${{ secrets.GITHUB_TOKEN }}
+          dotnet_version: '8.0.x'
+          configuration: 'Release'
+          git_user_email: 'action@github.com'
+          git_user_name: 'GitHub Action' 

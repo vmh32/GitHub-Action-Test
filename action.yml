@@ -1,85 +1,162 @@
-name: Build and Package
+name: 'NuGet Package Build and Release'
+description: 'Build and release NuGet packages with dependency management'
 
-on:
-  pull_request:
-    types: [reopened]
-    branches: [ main ]
-    paths:
-      - 'LibraryA/**'
-      - 'LibraryB/**'
-      - 'LibraryC/**'
-      - 'LibraryD/**'
+inputs:
+  projects:
+    description: 'Project configurations in JSON format'
+    required: true
+  dotnet_version:
+    description: '.NET version to use'
+    required: false
+    default: '8.0.x'
+  configuration:
+    description: 'Build configuration'
+    required: false
+    default: 'Release'
+  github_token:
+    description: 'GitHub token for package publishing'
+    required: true
+  git_user_email:
+    description: 'Git user email for commits'
+    required: false
+    default: 'action@github.com'
+  git_user_name:
+    description: 'Git user name for commits'
+    required: false
+    default: 'GitHub Action'
 
-permissions:
-  contents: write
-  pull-requests: write
-  packages: write
+outputs:
+  changed_projects:
+    description: 'List of projects that were changed'
+    value: ${{ steps.order.outputs.modified_packages }}
+  version_changes:
+    description: 'Summary of version changes made'
+    value: ${{ steps.versions.outputs.version_changes }}
+  created_tags:
+    description: 'List of Git tags created'
+    value: ${{ steps.tags.outputs.tags }}
 
-jobs:
-  detect-and-build:
-    # Check if the branch name matches Release.#.#.#
-    if: startsWith(github.head_ref, 'Release.')
-    runs-on: windows-latest
-    env:
-      DOTNET_VERSION: '8.0.x'
-      GITHUB_PACKAGES_URL: https://nuget.pkg.github.com/${{ github.repository_owner }}/index.json
-      NUGET_AUTH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-      CONFIGURATION: Release
-      PR_BRANCH: ${{ github.head_ref }}
-      GIT_USER_EMAIL: "action@github.com"
-      GIT_USER_NAME: "GitHub Action"
-      OUTPUT_DIR: ./nupkg
+runs:
+  using: "composite"
+  steps:
+    - name: Debug Environment
+      shell: bash
+      run: |
+        echo "Debug: Starting action execution"
+        echo "GITHUB_REPOSITORY: $GITHUB_REPOSITORY"
+        echo "GITHUB_EVENT_NAME: $GITHUB_EVENT_NAME"
+        echo "GITHUB_REF: $GITHUB_REF"
+        echo "GITHUB_HEAD_REF: $GITHUB_HEAD_REF"
+        echo "GITHUB_WORKSPACE: $GITHUB_WORKSPACE"
 
-    steps:
-    - uses: actions/checkout@v4
+    - name: Setup Python
+      uses: actions/setup-python@v4
       with:
-        fetch-depth: 0
-        ref: ${{ env.PR_BRANCH }}
-        clean: true
+        python-version: '3.x'
 
-    - name: Validate Branch Name
-      shell: bash
-      id: validate
-      run: |
-        if ! [[ ${{ env.PR_BRANCH }} =~ ^Release\.[0-9]+\.[0-9]+\.[0-9]+$ ]]; then
-          echo "Branch name must follow format Release.#.#.#"
-          exit 1
-        fi
-
-    - name: Create Package Mapping
-      id: package_map
+    - name: Setup Environment
       shell: bash
       run: |
-        # Create package mapping file in a persistent location
-        mkdir -p scripts
-        cat > scripts/package_map.json << 'EOF'
+        # Set up environment variables
         {
-          "X1": "LibraryA:LibraryA/LibraryA.csproj:LibraryB+LibraryC",
-          "X2": "LibraryB:LibraryB/LibraryB.csproj:LibraryC",
-          "X3": "LibraryC:LibraryC/LibraryC.csproj:",
-          "X4": "LibraryD:LibraryD/LibraryD.nuspec:"
-        }
-        EOF
-        echo "Created package mapping file"
-        echo "path=scripts/package_map.json" >> $GITHUB_OUTPUT
+          echo "DOTNET_VERSION=${{ inputs.dotnet_version }}"
+          echo "GITHUB_PACKAGES_URL=https://nuget.pkg.github.com/${{ github.repository_owner }}/index.json"
+          echo "NUGET_AUTH_TOKEN=${{ inputs.github_token }}"
+          echo "CONFIGURATION=${{ inputs.configuration }}"
+          echo "PR_BRANCH=${{ github.head_ref }}"
+          echo "GIT_USER_EMAIL=${{ inputs.git_user_email }}"
+          echo "GIT_USER_NAME=${{ inputs.git_user_name }}"
+          echo "OUTPUT_DIR=./nupkg"
+          echo "GITHUB_TOKEN=${{ inputs.github_token }}"
+        } >> $GITHUB_ENV
+        
+        echo "Debug: Environment variables set"
+        echo "PR_BRANCH: ${{ github.head_ref }}"
+        echo "GITHUB_REPOSITORY_OWNER: ${{ github.repository_owner }}"
+
+    - name: Generate Configuration
+      id: config
+      shell: python
+      env:
+        INPUT_PROJECTS: ${{ inputs.projects }}
+        GITHUB_TOKEN: ${{ inputs.github_token }}
+      run: |
+        import json
+        import os
+        import sys
+        from pathlib import Path
+
+        print("Debug: Starting configuration generation")
+        
+        def process_projects(projects_json):
+            print(f"Debug: Processing projects JSON: {projects_json[:100]}...")
+            projects = json.loads(projects_json)
+            
+            # Create package mapping
+            package_map = {}
+            filters = {}
+            
+            for idx, (project_id, config) in enumerate(projects.items(), 1):
+                key = f"X{idx}"
+                path = config['path']
+                patterns = config.get('patterns', [f"{project_id}/**"])
+                deps = config.get('dependencies', [])
+                
+                # Create package map entry
+                package_map[key] = f"{project_id}:{path}:{'+'.join(deps)}"
+                
+                # Create filter entry
+                filters[key] = patterns
+                
+                print(f"Debug: Processed project {project_id} with key {key}")
+            
+            return package_map, filters
+
+        def main():
+            try:
+                # Get input from environment variable
+                projects_json = os.environ['INPUT_PROJECTS']
+                print("Debug: Retrieved INPUT_PROJECTS from environment")
+                
+                # Process projects
+                package_map, filters = process_projects(projects_json)
+                print("Debug: Projects processed successfully")
+                
+                # Ensure scripts directory exists
+                Path('scripts').mkdir(exist_ok=True)
+                print("Debug: Created scripts directory")
+                
+                # Write package map
+                with open('scripts/package_map.json', 'w') as f:
+                    json.dump(package_map, f, indent=2)
+                print("Debug: Wrote package_map.json")
+                
+                # Generate filters YAML
+                with open(os.environ['GITHUB_OUTPUT'], 'a') as f:
+                    f.write("filters=")
+                    yaml_content = "filters: |\n"
+                    for key, patterns in filters.items():
+                        yaml_content += f"  {key}:\n"
+                        for pattern in patterns:
+                            yaml_content += f"    - '{pattern}'\n"
+                    f.write(yaml_content + "\n")
+                print("Debug: Wrote filters to GITHUB_OUTPUT")
+                
+            except Exception as e:
+                print(f"Error in configuration generation: {str(e)}")
+                raise
+
+        if __name__ == '__main__':
+            main()
 
     - name: Detect Changed Packages
       id: filter
       uses: dorny/paths-filter@v3
-      with:
-        filters: |
-          X1:
-            - 'LibraryA/**'
-          X2:
-            - 'LibraryB/**'
-          X3:
-            - 'LibraryC/**'
-          X4:
-            - 'LibraryD/**'
+      with: ${{ fromJSON(steps.config.outputs.filters) }}
 
     - name: Order Dependencies
-      shell: bash
       id: order
+      shell: bash
       run: |
         python3 - << 'EOF'
         import json
@@ -109,9 +186,9 @@ jobs:
                     deps = parts[2].split('+') if parts[2] else []
                     nodes.add(key)
                     for dep in deps:
-                        if dep and dep in lib_to_key:  # Check if the library id has a corresponding key
+                        if dep and dep in lib_to_key:
                             dep_key = lib_to_key[dep]
-                            if dep_key in package_map:  # Verify the key exists in package_map
+                            if dep_key in package_map:
                                 graph[key].append(dep_key)
                                 nodes.add(dep_key)
             return graph, nodes
@@ -150,7 +227,7 @@ jobs:
                 f.write('has_nuspec=false\n')
             sys.exit(0)
 
-        # Remove brackets and split into items, properly strip quotes
+        # Remove brackets and split into items
         modified_packages = [item.strip().strip('"') for item in changes.strip('[]').split(',')]
         
         # Create dependency graph
@@ -162,12 +239,15 @@ jobs:
         # Check if any of the MODIFIED packages contain .nuspec
         has_nuspec = any('.nuspec' in package_map[key] for key in modified_packages if key in package_map)
         
-        # Output the results using environment file
+        # Output the results
         with open(os.environ['GITHUB_OUTPUT'], 'a') as f:
             f.write(f'ordered_changes=[{",".join(ordered_keys)}]\n')
             f.write(f'modified_packages=[{",".join(modified_packages)}]\n')
             f.write(f'has_nuspec={str(has_nuspec).lower()}\n')
         EOF
+
+    # Rest of the existing steps from build.yml...
+    # (Version updates, commit changes, setup .NET, etc.) 
 
     - name: Get PR Comments
       id: pr_comment
@@ -818,7 +898,7 @@ jobs:
                 fi
               fi
             done
-
+            
             echo "## Version Changes"
             if [ ! -z "${{ steps.versions.outputs.version_changes }}" ]; then
               echo "${{ steps.versions.outputs.version_changes }}" | tr ';' '\n' | while read -r change; do

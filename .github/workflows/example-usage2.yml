@@ -1,0 +1,62 @@
+name: Build and Package Example V2
+
+on:
+  pull_request:
+    types: [opened, reopened, synchronize, edited]
+    branches: [ main ]
+
+permissions:
+  contents: write
+  pull-requests: write
+  packages: write
+
+jobs:
+  detect-changes:
+    if: startsWith(github.head_ref, 'Release.')
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+          ref: ${{ github.head_ref }}
+
+      - name: Debug Info
+        run: |
+          echo "Branch: ${{ github.head_ref }}"
+          echo "Event: ${{ github.event_name }}"
+          echo "Action: ${{ github.action }}"
+          echo "Ref: ${{ github.ref }}"
+
+      - uses: ./
+        id: changes
+        with:
+          projects: |
+            {
+              "LibraryA": {
+                "path": "LibraryA/LibraryA.csproj",
+                "patterns": ["LibraryA/**"],
+                "dependencies": ["LibraryB", "LibraryC"]
+              },
+              "LibraryB": {
+                "path": "LibraryB/LibraryB.csproj",
+                "patterns": ["LibraryB/**"],
+                "dependencies": ["LibraryC"]
+              },
+              "LibraryC": {
+                "path": "LibraryC/LibraryC.csproj",
+                "patterns": ["LibraryC/**"],
+                "dependencies": []
+              },
+              "LibraryD": {
+                "path": "LibraryD/LibraryD.nuspec",
+                "patterns": ["LibraryD/**"],
+                "dependencies": []
+              }
+            }
+          github_token: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Test Output
+        run: |
+          echo "Changed projects: ${{ steps.changes.outputs.changed_projects }}"
+          echo "Ordered changes: ${{ steps.changes.outputs.ordered_changes }}"
+          echo "Has nuspec: ${{ steps.changes.outputs.has_nuspec }}" 
