@@ -26,3 +26,16 @@ jobs:
           echo "PR Event check: ${{ github.event_name == 'pull_request' }}"
           echo "Branch check: ${{ startsWith(github.head_ref, 'Release') }}"
           echo "Full condition: ${{ github.event_name == 'pull_request' && startsWith(github.head_ref, 'Release') }}"
+
+      - name: Checkout code
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+          ref: ${{ github.head_ref }}
+
+      - name: List repository contents
+        run: |
+          echo "Current directory contents:"
+          ls -la
+          echo "Git status:"
+          git status
