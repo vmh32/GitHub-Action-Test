@@ -39,9 +39,15 @@ outputs:
 runs:
   using: "composite"
   steps:
+    - name: Setup Python
+      uses: actions/setup-python@v4
+      with:
+        python-version: '3.x'
+
     - name: Setup Environment
       shell: bash
       run: |
+        # Set up environment variables
         echo "DOTNET_VERSION=${{ inputs.dotnet_version }}" >> $GITHUB_ENV
         echo "GITHUB_PACKAGES_URL=https://nuget.pkg.github.com/${{ github.repository_owner }}/index.json" >> $GITHUB_ENV
         echo "NUGET_AUTH_TOKEN=${{ inputs.github_token }}" >> $GITHUB_ENV
@@ -50,15 +56,13 @@ runs:
         echo "GIT_USER_EMAIL=${{ inputs.git_user_email }}" >> $GITHUB_ENV
         echo "GIT_USER_NAME=${{ inputs.git_user_name }}" >> $GITHUB_ENV
         echo "OUTPUT_DIR=./nupkg" >> $GITHUB_ENV
-
-    - name: Setup Python
-      uses: actions/setup-python@v4
-      with:
-        python-version: '3.x'
+        echo "GITHUB_TOKEN=${{ inputs.github_token }}" >> $GITHUB_ENV
 
     - name: Generate Configuration
       id: config
       shell: python
+      env:
+        INPUT_PROJECTS: ${{ inputs.projects }}
       run: |
         import json
         import os
@@ -87,7 +91,7 @@ runs:
             return package_map, filters
 
         def main():
-            # Get input
+            # Get input from environment variable
             projects_json = os.environ['INPUT_PROJECTS']
             
             # Process projects
@@ -101,15 +105,14 @@ runs:
                 json.dump(package_map, f, indent=2)
             
             # Generate filters YAML
-            filters_yaml = "filters: |\n"
-            for key, patterns in filters.items():
-                filters_yaml += f"  {key}:\n"
-                for pattern in patterns:
-                    filters_yaml += f"    - '{pattern}'\n"
-            
-            # Write to GITHUB_OUTPUT
             with open(os.environ['GITHUB_OUTPUT'], 'a') as f:
-                f.write(filters_yaml)
+                f.write("filters=")
+                yaml_content = "filters: |\n"
+                for key, patterns in filters.items():
+                    yaml_content += f"  {key}:\n"
+                    for pattern in patterns:
+                        yaml_content += f"    - '{pattern}'\n"
+                f.write(yaml_content + "\n")
 
         if __name__ == '__main__':
             main()
