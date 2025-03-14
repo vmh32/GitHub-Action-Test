@@ -5,6 +5,7 @@ on:
     types: [opened, reopened, synchronize, edited]
     branches: [ main ]
 
+
 permissions:
   contents: write
   pull-requests: write
@@ -12,24 +13,19 @@ permissions:
 
 jobs:
   detect-changes:
-    if: startsWith(github.head_ref, 'Release.')
+    if: github.event_name == 'pull_request' && startsWith(github.head_ref, 'Release')
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v4
+      - name: Checkout code
+        uses: actions/checkout@v4
         with:
           fetch-depth: 0
           ref: ${{ github.head_ref }}
 
-      - name: Debug Info
-        run: |
-          echo "Branch: ${{ github.head_ref }}"
-          echo "Event: ${{ github.event_name }}"
-          echo "Action: ${{ github.action }}"
-          echo "Ref: ${{ github.ref }}"
-
-      - uses: ./
-        id: changes
+      - name: Run action2
+        uses: ./.github/actions/nuget-package-build-release
         with:
+          github_token: ${{ secrets.GITHUB_TOKEN }}
           projects: |
             {
               "LibraryA": {
@@ -53,10 +49,3 @@ jobs:
                 "dependencies": []
               }
             }
-          github_token: ${{ secrets.GITHUB_TOKEN }}
-
-      - name: Test Output
-        run: |
-          echo "Changed projects: ${{ steps.changes.outputs.changed_projects }}"
-          echo "Ordered changes: ${{ steps.changes.outputs.ordered_changes }}"
-          echo "Has nuspec: ${{ steps.changes.outputs.has_nuspec }}" 

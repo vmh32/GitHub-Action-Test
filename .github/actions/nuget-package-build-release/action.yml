@@ -1,0 +1,90 @@
+name: 'NuGet Package Build and Release'
+description: 'Build and release NuGet packages with dependency management'
+
+inputs:
+  projects:
+    description: 'Project configurations in JSON format'
+    required: true
+  github_token:
+    description: 'GitHub token for API access'
+    required: true
+
+outputs:
+  changes:
+    description: 'Array of filter names that were detected as changed'
+    value: ${{ steps.filter.outputs.changes }}
+  modified_packages:
+    description: 'List of projects that were changed'
+    value: ${{ steps.filter.outputs.modified_packages }}
+  ordered_changes:
+    description: 'List of projects in dependency order'
+    value: ${{ steps.filter.outputs.ordered_changes }}
+  has_nuspec:
+    description: 'Whether any changed package uses nuspec'
+    value: ${{ steps.filter.outputs.has_nuspec }}
+
+runs:
+  using: "composite"
+  steps:
+    - name: Debug Info
+      shell: bash
+      run: |
+        echo "Event name: ${{ github.event_name }}"
+        echo "Head ref: ${{ github.head_ref }}"
+        echo "Base ref: ${{ github.base_ref }}"
+        echo "Ref: ${{ github.ref }}"
+        echo "Action path: ${{ github.action_path }}"
+        echo "Workspace: ${{ github.workspace }}"
+        echo "Event path: ${{ github.event_path }}"
+        if [ -f "${{ github.event_path }}" ]; then
+          echo "Event file contents:"
+          cat "${{ github.event_path }}"
+        else
+          echo "Event file not found"
+        fi
+
+    - name: Checkout code
+      uses: actions/checkout@v4
+      with:
+        fetch-depth: 0
+
+    - name: Set up Python
+      uses: actions/setup-python@v5
+      with:
+        python-version: '3.x'
+
+    - name: Install dependencies
+      shell: bash
+      run: |
+        python -m pip install --upgrade pip
+        pip install requests pyyaml
+
+    - name: List files in action directory
+      shell: bash
+      run: |
+        echo "Contents of ${{ github.action_path }}:"
+        ls -la ${{ github.action_path }}
+        echo "Contents of ${{ github.action_path }}/src:"
+        ls -la ${{ github.action_path }}/src || echo "src directory not found"
+
+    - name: Filter Changes
+      id: filter
+      shell: bash
+      env:
+        GITHUB_TOKEN: ${{ inputs.github_token }}
+        INPUT_PROJECTS: ${{ inputs.projects }}
+      run: |
+        echo "Running change detection..."
+        if [ -f "${{ github.action_path }}/src/detect_changes.py" ]; then
+          python "${{ github.action_path }}/src/detect_changes.py"
+          echo "Change detection completed. Checking outputs..."
+          if [ -f "$GITHUB_OUTPUT" ]; then
+            echo "Contents of GITHUB_OUTPUT:"
+            cat "$GITHUB_OUTPUT"
+          else
+            echo "Warning: GITHUB_OUTPUT file not found"
+          fi
+        else
+          echo "Error: detect_changes.py not found at ${{ github.action_path }}/src/detect_changes.py"
+          exit 1
+        fi 
