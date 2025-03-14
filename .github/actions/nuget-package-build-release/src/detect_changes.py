@@ -47,7 +47,7 @@ def get_changed_files(token: str) -> List[str]:
 
     # Extract filenames from response
     files = [file['filename'] for file in response.json().get('files', [])]
-    print(f"Found {len(files)} changed files")
+    print(f"Found {len(files)} changed files: {files}")
     return files
 
 def matches_pattern(file_path: str, patterns: List[str]) -> bool:
@@ -63,34 +63,6 @@ def detect_changes(projects: Dict, changed_files: List[str]) -> Set[str]:
             print(f"Project {project_id} was modified")
             modified_projects.add(project_id)
     return modified_projects
-
-def order_projects(projects: Dict, modified_projects: Set[str]) -> List[str]:
-    """Order projects by dependencies."""
-    print("Ordering projects by dependencies...")
-    ordered = []
-    visited = set()
-    visiting = set()
-
-    def visit(project_id: str):
-        """DFS visit with cycle detection."""
-        if project_id in visited:
-            return
-        if project_id in visiting:
-            sys.exit(f"Error: Circular dependency detected involving {project_id}")
-
-        visiting.add(project_id)
-        for dep in projects[project_id]['dependencies']:
-            if dep in modified_projects:
-                visit(dep)
-        visiting.remove(project_id)
-        visited.add(project_id)
-        ordered.append(project_id)
-
-    for project_id in modified_projects:
-        visit(project_id)
-
-    print(f"Ordered projects: {ordered}")
-    return ordered
 
 def main():
     """Main function."""
@@ -109,28 +81,14 @@ def main():
 
         # Get changed files
         changed_files = get_changed_files(token)
-        print(f"Changed files: {changed_files}")
 
         # Detect modified projects
         modified_projects = detect_changes(projects, changed_files)
         print(f"Modified projects: {modified_projects}")
 
-        # Order projects by dependencies
-        ordered_projects = order_projects(projects, modified_projects)
-        print(f"Ordered projects: {ordered_projects}")
-
-        # Check if any modified project uses nuspec
-        has_nuspec = any(projects[pid]['path'].endswith('.nuspec') for pid in modified_projects)
-
-        # Set outputs using GitHub Actions environment file
+        # Set output in dorny format
         with open(os.environ['GITHUB_OUTPUT'], 'a') as f:
-            # Output changes as a JSON array (dorny format)
             f.write(f"changes={json.dumps(list(modified_projects))}\n")
-            
-            # Original outputs
-            f.write(f"modified_packages={json.dumps(list(modified_projects))}\n")
-            f.write(f"ordered_changes={json.dumps(ordered_projects)}\n")
-            f.write(f"has_nuspec={str(has_nuspec).lower()}\n")
 
         print("Change detection completed successfully")
 

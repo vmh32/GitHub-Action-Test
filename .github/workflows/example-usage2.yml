@@ -31,6 +31,21 @@ jobs:
               "LibraryA": {
                 "path": "LibraryA/LibraryA.csproj",
                 "patterns": ["LibraryA/**"],
+                "dependencies": ["LibraryB", "LibraryC"]
+              },
+              "LibraryB": {
+                "path": "LibraryB/LibraryB.csproj",
+                "patterns": ["LibraryB/**"],
+                "dependencies": ["LibraryC"]
+              },
+              "LibraryC": {
+                "path": "LibraryC/LibraryC.csproj",
+                "patterns": ["LibraryC/**"],
+                "dependencies": []
+              },
+              "LibraryD": {
+                "path": "LibraryD/LibraryD.nuspec",
+                "patterns": ["LibraryD/**"],
                 "dependencies": []
               }
             }
