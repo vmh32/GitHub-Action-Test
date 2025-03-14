@@ -16,52 +16,20 @@ jobs:
     if: github.event_name == 'pull_request' && startsWith(github.head_ref, 'Release')
     runs-on: ubuntu-latest
     steps:
-      - name: Simple Log
-        run: |
-          echo "This is a test log"
-          echo "Branch: ${{ github.head_ref }}"
-          echo "Event name: ${{ github.event_name }}"
-          echo "Event type: ${{ github.event.action }}"
-          echo "Base ref: ${{ github.base_ref }}"
-          echo "PR Event check: ${{ github.event_name == 'pull_request' }}"
-          echo "Branch check: ${{ startsWith(github.head_ref, 'Release') }}"
-          echo "Full condition: ${{ github.event_name == 'pull_request' && startsWith(github.head_ref, 'Release') }}"
-
       - name: Checkout code
         uses: actions/checkout@v4
         with:
           fetch-depth: 0
           ref: ${{ github.head_ref }}
 
-      - name: List repository contents
-        run: |
-          echo "Current directory contents:"
-          ls -la
-          echo "Git status:"
-          git status
-
-      - name: Setup .NET
-        uses: actions/setup-dotnet@v3
+      - name: Run action2
+        uses: ./.github/actions/nuget-package-build-release
         with:
-          dotnet-version: '6.0.x'
-
-      - name: Verify Project Files
-        run: |
-          echo "Checking Library Projects:"
-          for lib in LibraryA LibraryB LibraryC; do
-            echo "Checking $lib:"
-            if [ -f "$lib/$lib.csproj" ]; then
-              echo "Found $lib.csproj"
-              cat "$lib/$lib.csproj"
-            else
-              echo "WARNING: $lib.csproj not found"
-            fi
-          done
-          
-          echo "Checking LibraryD:"
-          if [ -f "LibraryD/LibraryD.nuspec" ]; then
-            echo "Found LibraryD.nuspec"
-            cat "LibraryD/LibraryD.nuspec"
-          else
-            echo "WARNING: LibraryD.nuspec not found"
-          fi
+          projects: |
+            {
+              "LibraryA": {
+                "path": "LibraryA/LibraryA.csproj",
+                "patterns": ["LibraryA/**"],
+                "dependencies": []
+              }
+            }
