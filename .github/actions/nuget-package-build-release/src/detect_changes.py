@@ -52,16 +52,24 @@ def get_changed_files(token: str) -> List[str]:
 
 def matches_pattern(file_path: str, patterns: List[str]) -> bool:
     """Check if file path matches any of the glob patterns."""
-    return any(fnmatch.fnmatch(file_path, pattern) for pattern in patterns)
+    for pattern in patterns:
+        if fnmatch.fnmatch(file_path, pattern):
+            print(f"File {file_path} matches pattern {pattern}")
+            return True
+    return False
 
 def detect_changes(projects: Dict, changed_files: List[str]) -> Set[str]:
     """Detect which projects were modified based on changed files."""
     print("Detecting project changes...")
     modified_projects = set()
-    for project_id, config in projects.items():
-        if any(matches_pattern(file, pattern) for file in changed_files for pattern in config['patterns']):
-            print(f"Project {project_id} was modified")
-            modified_projects.add(project_id)
+    
+    for file_path in changed_files:
+        for project_id, config in projects.items():
+            if matches_pattern(file_path, config['patterns']):
+                print(f"Project {project_id} was modified by {file_path}")
+                modified_projects.add(project_id)
+                break  # Move to next file once we find a matching project
+    
     return modified_projects
 
 def main():
