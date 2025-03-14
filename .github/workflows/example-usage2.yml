@@ -23,7 +23,7 @@ jobs:
           ref: ${{ github.head_ref }}
 
       - name: Run action2
-        uses: ./.github/actions/nuget-package-build-release/action2.yml
+        uses: ./.github/actions/nuget-package-build-release
         with:
           github_token: ${{ secrets.GITHUB_TOKEN }}
           projects: |
