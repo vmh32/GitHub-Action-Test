@@ -17,7 +17,20 @@ permissions:
   packages: write
 
 jobs:
+  debug-conditions:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Debug Trigger Conditions
+        run: |
+          echo "Event name: ${{ github.event_name }}"
+          echo "Event type: ${{ github.event.action }}"
+          echo "Head ref: ${{ github.head_ref }}"
+          echo "Base ref: ${{ github.base_ref }}"
+          echo "Modified files:"
+          cat $GITHUB_EVENT_PATH | jq -r '.pull_request.changed_files'
+
   detect-changes:
+    needs: debug-conditions
     if: startsWith(github.head_ref, 'Release.')
     runs-on: ubuntu-latest
     steps:
