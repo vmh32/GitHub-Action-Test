@@ -13,7 +13,7 @@ permissions:
 
 jobs:
   detect-changes:
-    if: ${{ startsWith(github.head_ref, 'Release') }}
+    if: github.event_name == 'pull_request' && startsWith(github.head_ref, 'Release')
     runs-on: ubuntu-latest
     steps:
       - name: Simple Log
@@ -23,4 +23,6 @@ jobs:
           echo "Event name: ${{ github.event_name }}"
           echo "Event type: ${{ github.event.action }}"
           echo "Base ref: ${{ github.base_ref }}"
-          echo "Condition check: ${{ startsWith(github.head_ref, 'Release') }}"
+          echo "PR Event check: ${{ github.event_name == 'pull_request' }}"
+          echo "Branch check: ${{ startsWith(github.head_ref, 'Release') }}"
+          echo "Full condition: ${{ github.event_name == 'pull_request' && startsWith(github.head_ref, 'Release') }}"
