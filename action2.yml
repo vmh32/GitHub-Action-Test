@@ -23,6 +23,23 @@ outputs:
 runs:
   using: "composite"
   steps:
+    - name: Debug Info
+      shell: bash
+      run: |
+        echo "Event name: ${{ github.event_name }}"
+        echo "Head ref: ${{ github.head_ref }}"
+        echo "Base ref: ${{ github.base_ref }}"
+        echo "Ref: ${{ github.ref }}"
+        echo "Action path: ${{ github.action_path }}"
+        echo "Workspace: ${{ github.workspace }}"
+        echo "Event path: ${{ github.event_path }}"
+        if [ -f "${{ github.event_path }}" ]; then
+          echo "Event file contents:"
+          cat "${{ github.event_path }}"
+        else
+          echo "Event file not found"
+        fi
+
     - name: Checkout code
       uses: actions/checkout@v4
       with:
@@ -39,10 +56,24 @@ runs:
         python -m pip install --upgrade pip
         pip install requests
 
+    - name: List files in action directory
+      shell: bash
+      run: |
+        echo "Contents of ${{ github.action_path }}:"
+        ls -la ${{ github.action_path }}
+        echo "Contents of ${{ github.action_path }}/src:"
+        ls -la ${{ github.action_path }}/src || echo "src directory not found"
+
     - name: Run change detection
       id: detect_changes
       shell: bash
       env:
         GITHUB_TOKEN: ${{ inputs.github_token }}
         INPUT_PROJECTS: ${{ inputs.projects }}
-      run: python ${{ github.action_path }}/src/detect_changes.py 
+      run: |
+        if [ -f "${{ github.action_path }}/src/detect_changes.py" ]; then
+          python "${{ github.action_path }}/src/detect_changes.py"
+        else
+          echo "Error: detect_changes.py not found at ${{ github.action_path }}/src/detect_changes.py"
+          exit 1
+        fi 
