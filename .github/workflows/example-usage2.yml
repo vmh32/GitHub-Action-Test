@@ -13,10 +13,12 @@ permissions:
 
 jobs:
   detect-changes:
-    if: startsWith(github.head_ref, 'Release.')
     runs-on: ubuntu-latest
     steps:
       - name: Simple Log
         run: |
           echo "This is a test log"
           echo "Branch: ${{ github.head_ref }}"
+          echo "Event name: ${{ github.event_name }}"
+          echo "Event type: ${{ github.event.action }}"
+          echo "Base ref: ${{ github.base_ref }}"
