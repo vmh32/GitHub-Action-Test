@@ -1,11 +1,9 @@
-name: Build and Package Example (Old)
+name: Build and Package Example V2
 
 on:
-  workflow_dispatch:
-  # Disabled triggers
-  # pull_request:
-  #   types: [opened, reopened, synchronize, edited]
-  #   branches: [ main ]
+  pull_request:
+    types: [opened, reopened, synchronize, edited]
+    branches: [ main ]
 
 permissions:
   contents: write
@@ -13,18 +11,14 @@ permissions:
   packages: write
 
 jobs:
-  build-packages:
+  detect-changes:
     if: startsWith(github.head_ref, 'Release.')
-    runs-on: windows-latest
-    env:
-      GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+    runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
         with:
           fetch-depth: 0
           ref: ${{ github.head_ref }}
-          clean: true
-          token: ${{ secrets.GITHUB_TOKEN }}
 
       - name: Debug Info
         run: |
@@ -34,6 +28,7 @@ jobs:
           echo "Ref: ${{ github.ref }}"
 
       - uses: ./
+        id: changes
         with:
           projects: |
             {
@@ -59,7 +54,9 @@ jobs:
               }
             }
           github_token: ${{ secrets.GITHUB_TOKEN }}
-          dotnet_version: '8.0.x'
-          configuration: 'Release'
-          git_user_email: 'action@github.com'
-          git_user_name: 'GitHub Action' 
+
+      - name: Test Output
+        run: |
+          echo "Changed projects: ${{ steps.changes.outputs.changed_projects }}"
+          echo "Ordered changes: ${{ steps.changes.outputs.ordered_changes }}"
+          echo "Has nuspec: ${{ steps.changes.outputs.has_nuspec }}" 

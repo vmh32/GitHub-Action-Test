@@ -39,6 +39,16 @@ outputs:
 runs:
   using: "composite"
   steps:
+    - name: Debug Environment
+      shell: bash
+      run: |
+        echo "Debug: Starting action execution"
+        echo "GITHUB_REPOSITORY: $GITHUB_REPOSITORY"
+        echo "GITHUB_EVENT_NAME: $GITHUB_EVENT_NAME"
+        echo "GITHUB_REF: $GITHUB_REF"
+        echo "GITHUB_HEAD_REF: $GITHUB_HEAD_REF"
+        echo "GITHUB_WORKSPACE: $GITHUB_WORKSPACE"
+
     - name: Setup Python
       uses: actions/setup-python@v4
       with:
@@ -48,28 +58,38 @@ runs:
       shell: bash
       run: |
         # Set up environment variables
-        echo "DOTNET_VERSION=${{ inputs.dotnet_version }}" >> $GITHUB_ENV
-        echo "GITHUB_PACKAGES_URL=https://nuget.pkg.github.com/${{ github.repository_owner }}/index.json" >> $GITHUB_ENV
-        echo "NUGET_AUTH_TOKEN=${{ inputs.github_token }}" >> $GITHUB_ENV
-        echo "CONFIGURATION=${{ inputs.configuration }}" >> $GITHUB_ENV
-        echo "PR_BRANCH=${{ github.head_ref }}" >> $GITHUB_ENV
-        echo "GIT_USER_EMAIL=${{ inputs.git_user_email }}" >> $GITHUB_ENV
-        echo "GIT_USER_NAME=${{ inputs.git_user_name }}" >> $GITHUB_ENV
-        echo "OUTPUT_DIR=./nupkg" >> $GITHUB_ENV
-        echo "GITHUB_TOKEN=${{ inputs.github_token }}" >> $GITHUB_ENV
+        {
+          echo "DOTNET_VERSION=${{ inputs.dotnet_version }}"
+          echo "GITHUB_PACKAGES_URL=https://nuget.pkg.github.com/${{ github.repository_owner }}/index.json"
+          echo "NUGET_AUTH_TOKEN=${{ inputs.github_token }}"
+          echo "CONFIGURATION=${{ inputs.configuration }}"
+          echo "PR_BRANCH=${{ github.head_ref }}"
+          echo "GIT_USER_EMAIL=${{ inputs.git_user_email }}"
+          echo "GIT_USER_NAME=${{ inputs.git_user_name }}"
+          echo "OUTPUT_DIR=./nupkg"
+          echo "GITHUB_TOKEN=${{ inputs.github_token }}"
+        } >> $GITHUB_ENV
+        
+        echo "Debug: Environment variables set"
+        echo "PR_BRANCH: ${{ github.head_ref }}"
+        echo "GITHUB_REPOSITORY_OWNER: ${{ github.repository_owner }}"
 
     - name: Generate Configuration
       id: config
       shell: python
       env:
         INPUT_PROJECTS: ${{ inputs.projects }}
+        GITHUB_TOKEN: ${{ inputs.github_token }}
       run: |
         import json
         import os
         import sys
         from pathlib import Path
 
+        print("Debug: Starting configuration generation")
+        
         def process_projects(projects_json):
+            print(f"Debug: Processing projects JSON: {projects_json[:100]}...")
             projects = json.loads(projects_json)
             
             # Create package mapping
@@ -87,32 +107,44 @@ runs:
                 
                 # Create filter entry
                 filters[key] = patterns
+                
+                print(f"Debug: Processed project {project_id} with key {key}")
             
             return package_map, filters
 
         def main():
-            # Get input from environment variable
-            projects_json = os.environ['INPUT_PROJECTS']
-            
-            # Process projects
-            package_map, filters = process_projects(projects_json)
-            
-            # Ensure scripts directory exists
-            Path('scripts').mkdir(exist_ok=True)
-            
-            # Write package map
-            with open('scripts/package_map.json', 'w') as f:
-                json.dump(package_map, f, indent=2)
-            
-            # Generate filters YAML
-            with open(os.environ['GITHUB_OUTPUT'], 'a') as f:
-                f.write("filters=")
-                yaml_content = "filters: |\n"
-                for key, patterns in filters.items():
-                    yaml_content += f"  {key}:\n"
-                    for pattern in patterns:
-                        yaml_content += f"    - '{pattern}'\n"
-                f.write(yaml_content + "\n")
+            try:
+                # Get input from environment variable
+                projects_json = os.environ['INPUT_PROJECTS']
+                print("Debug: Retrieved INPUT_PROJECTS from environment")
+                
+                # Process projects
+                package_map, filters = process_projects(projects_json)
+                print("Debug: Projects processed successfully")
+                
+                # Ensure scripts directory exists
+                Path('scripts').mkdir(exist_ok=True)
+                print("Debug: Created scripts directory")
+                
+                # Write package map
+                with open('scripts/package_map.json', 'w') as f:
+                    json.dump(package_map, f, indent=2)
+                print("Debug: Wrote package_map.json")
+                
+                # Generate filters YAML
+                with open(os.environ['GITHUB_OUTPUT'], 'a') as f:
+                    f.write("filters=")
+                    yaml_content = "filters: |\n"
+                    for key, patterns in filters.items():
+                        yaml_content += f"  {key}:\n"
+                        for pattern in patterns:
+                            yaml_content += f"    - '{pattern}'\n"
+                    f.write(yaml_content + "\n")
+                print("Debug: Wrote filters to GITHUB_OUTPUT")
+                
+            except Exception as e:
+                print(f"Error in configuration generation: {str(e)}")
+                raise
 
         if __name__ == '__main__':
             main()
