@@ -16,6 +16,8 @@ def get_github_token() -> str:
 
 def get_changed_files(token: str) -> List[str]:
     """Get list of changed files in the pull request."""
+    print("Getting changed files...")
+    
     # Get required environment variables
     event_path = os.environ.get('GITHUB_EVENT_PATH')
     if not event_path:
@@ -30,6 +32,8 @@ def get_changed_files(token: str) -> List[str]:
     base_sha = event_data['pull_request']['base']['sha']
     head_sha = event_data['pull_request']['head']['sha']
 
+    print(f"Comparing changes between {base_sha} and {head_sha}")
+
     # GitHub API request
     url = f"https://api.github.com/repos/{repo_full_name}/compare/{base_sha}...{head_sha}"
     headers = {
@@ -42,7 +46,9 @@ def get_changed_files(token: str) -> List[str]:
         sys.exit(f"Error: Failed to get changed files. Status code: {response.status_code}")
 
     # Extract filenames from response
-    return [file['filename'] for file in response.json().get('files', [])]
+    files = [file['filename'] for file in response.json().get('files', [])]
+    print(f"Found {len(files)} changed files")
+    return files
 
 def matches_pattern(file_path: str, patterns: List[str]) -> bool:
     """Check if file path matches any of the glob patterns."""
@@ -50,14 +56,17 @@ def matches_pattern(file_path: str, patterns: List[str]) -> bool:
 
 def detect_changes(projects: Dict, changed_files: List[str]) -> Set[str]:
     """Detect which projects were modified based on changed files."""
+    print("Detecting project changes...")
     modified_projects = set()
     for project_id, config in projects.items():
         if any(matches_pattern(file, pattern) for file in changed_files for pattern in config['patterns']):
+            print(f"Project {project_id} was modified")
             modified_projects.add(project_id)
     return modified_projects
 
 def order_projects(projects: Dict, modified_projects: Set[str]) -> List[str]:
     """Order projects by dependencies."""
+    print("Ordering projects by dependencies...")
     ordered = []
     visited = set()
     visiting = set()
@@ -80,11 +89,14 @@ def order_projects(projects: Dict, modified_projects: Set[str]) -> List[str]:
     for project_id in modified_projects:
         visit(project_id)
 
+    print(f"Ordered projects: {ordered}")
     return ordered
 
 def main():
     """Main function."""
     try:
+        print("Starting change detection...")
+        
         # Get inputs
         token = get_github_token()
         projects_json = os.environ.get('INPUT_PROJECTS')
@@ -93,29 +105,37 @@ def main():
 
         # Parse projects configuration
         projects = json.loads(projects_json)
+        print(f"Loaded configuration for {len(projects)} projects")
 
         # Get changed files
         changed_files = get_changed_files(token)
-        print(f"Debug: Changed files: {changed_files}")
+        print(f"Changed files: {changed_files}")
 
         # Detect modified projects
         modified_projects = detect_changes(projects, changed_files)
-        print(f"Debug: Modified projects: {modified_projects}")
+        print(f"Modified projects: {modified_projects}")
 
         # Order projects by dependencies
         ordered_projects = order_projects(projects, modified_projects)
-        print(f"Debug: Ordered projects: {ordered_projects}")
+        print(f"Ordered projects: {ordered_projects}")
 
         # Check if any modified project uses nuspec
         has_nuspec = any(projects[pid]['path'].endswith('.nuspec') for pid in modified_projects)
 
         # Set outputs using GitHub Actions environment file
         with open(os.environ['GITHUB_OUTPUT'], 'a') as f:
+            # Output changes as a JSON array (dorny format)
+            f.write(f"changes={json.dumps(list(modified_projects))}\n")
+            
+            # Original outputs
             f.write(f"modified_packages={json.dumps(list(modified_projects))}\n")
             f.write(f"ordered_changes={json.dumps(ordered_projects)}\n")
             f.write(f"has_nuspec={str(has_nuspec).lower()}\n")
 
+        print("Change detection completed successfully")
+
     except Exception as e:
+        print(f"Error occurred: {str(e)}")
         sys.exit(f"Error: {str(e)}")
 
 if __name__ == "__main__":
