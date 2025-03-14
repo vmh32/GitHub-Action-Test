@@ -23,6 +23,11 @@ outputs:
 runs:
   using: "composite"
   steps:
+    - name: Checkout code
+      uses: actions/checkout@v4
+      with:
+        fetch-depth: 0
+
     - name: Set up Python
       uses: actions/setup-python@v5
       with:
@@ -36,109 +41,8 @@ runs:
 
     - name: Run change detection
       id: detect_changes
-      shell: python
+      shell: bash
       env:
         GITHUB_TOKEN: ${{ inputs.github_token }}
         INPUT_PROJECTS: ${{ inputs.projects }}
-      run: |
-        import os
-        import sys
-        import json
-        import fnmatch
-        import requests
-        from typing import List, Set, Dict
-
-        def get_github_token() -> str:
-            """Get GitHub token from environment."""
-            token = os.environ.get('GITHUB_TOKEN')
-            if not token:
-                sys.exit("Error: GITHUB_TOKEN environment variable is required")
-            return token
-
-        def get_changed_files(token: str) -> List[str]:
-            """Get list of changed files in the pull request."""
-            event_path = os.environ.get('GITHUB_EVENT_PATH')
-            if not event_path:
-                sys.exit("Error: GITHUB_EVENT_PATH environment variable is required")
-
-            with open(event_path) as f:
-                event_data = json.load(f)
-
-            repo_full_name = event_data['repository']['full_name']
-            base_sha = event_data['pull_request']['base']['sha']
-            head_sha = event_data['pull_request']['head']['sha']
-
-            url = f"https://api.github.com/repos/{repo_full_name}/compare/{base_sha}...{head_sha}"
-            headers = {
-                'Authorization': f'token {token}',
-                'Accept': 'application/vnd.github.v3+json'
-            }
-
-            response = requests.get(url, headers=headers)
-            if response.status_code != 200:
-                sys.exit(f"Error: Failed to get changed files. Status code: {response.status_code}")
-
-            return [file['filename'] for file in response.json().get('files', [])]
-
-        def matches_pattern(file_path: str, patterns: List[str]) -> bool:
-            """Check if file path matches any of the glob patterns."""
-            return any(fnmatch.fnmatch(file_path, pattern) for pattern in patterns)
-
-        def detect_changes(projects: Dict, changed_files: List[str]) -> Set[str]:
-            """Detect which projects were modified based on changed files."""
-            modified_projects = set()
-            for project_id, config in projects.items():
-                if any(matches_pattern(file, pattern) for file in changed_files for pattern in config['patterns']):
-                    modified_projects.add(project_id)
-            return modified_projects
-
-        def order_projects(projects: Dict, modified_projects: Set[str]) -> List[str]:
-            """Order projects by dependencies."""
-            ordered = []
-            visited = set()
-            visiting = set()
-
-            def visit(project_id: str):
-                if project_id in visited:
-                    return
-                if project_id in visiting:
-                    sys.exit(f"Error: Circular dependency detected involving {project_id}")
-
-                visiting.add(project_id)
-                for dep in projects[project_id]['dependencies']:
-                    if dep in modified_projects:
-                        visit(dep)
-                visiting.remove(project_id)
-                visited.add(project_id)
-                ordered.append(project_id)
-
-            for project_id in modified_projects:
-                visit(project_id)
-
-            return ordered
-
-        try:
-            token = get_github_token()
-            projects_json = os.environ.get('INPUT_PROJECTS')
-            if not projects_json:
-                sys.exit("Error: INPUT_PROJECTS environment variable is required")
-
-            projects = json.loads(projects_json)
-            changed_files = get_changed_files(token)
-            print(f"Debug: Changed files: {changed_files}")
-
-            modified_projects = detect_changes(projects, changed_files)
-            print(f"Debug: Modified projects: {modified_projects}")
-
-            ordered_projects = order_projects(projects, modified_projects)
-            print(f"Debug: Ordered projects: {ordered_projects}")
-
-            has_nuspec = any(projects[pid]['path'].endswith('.nuspec') for pid in modified_projects)
-
-            with open(os.environ['GITHUB_OUTPUT'], 'a') as f:
-                f.write(f"modified_packages={json.dumps(list(modified_projects))}\n")
-                f.write(f"ordered_changes={json.dumps(ordered_projects)}\n")
-                f.write(f"has_nuspec={str(has_nuspec).lower()}\n")
-
-        except Exception as e:
-            sys.exit(f"Error: {str(e)}") 
+      run: python ${{ github.action_path }}/src/detect_changes.py 
