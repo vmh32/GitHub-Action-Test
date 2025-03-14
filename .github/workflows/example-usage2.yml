@@ -17,70 +17,11 @@ permissions:
   packages: write
 
 jobs:
-  debug-conditions:
-    runs-on: ubuntu-latest
-    steps:
-      - name: Debug Trigger Conditions
-        run: |
-          echo "Event name: ${{ github.event_name }}"
-          echo "Event type: ${{ github.event.action }}"
-          echo "Head ref: ${{ github.head_ref }}"
-          echo "Base ref: ${{ github.base_ref }}"
-          echo "Modified files:"
-          cat $GITHUB_EVENT_PATH | jq -r '.pull_request.changed_files'
-
   detect-changes:
-    needs: debug-conditions
     if: startsWith(github.head_ref, 'Release.')
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v4
-        with:
-          fetch-depth: 0
-          ref: ${{ github.head_ref }}
-
-      - name: Debug Info
+      - name: Simple Log
         run: |
+          echo "This is a test log"
           echo "Branch: ${{ github.head_ref }}"
-          echo "Event: ${{ github.event_name }}"
-          echo "Action: ${{ github.action }}"
-          echo "Ref: ${{ github.ref }}"
-          echo "Working directory:"
-          ls -la
-          echo "Action directory:"
-          ls -la .github/actions/nuget-package-build-release
-
-      - name: Run NuGet Package Build and Release
-        uses: ./.github/actions/nuget-package-build-release
-        id: changes
-        with:
-          projects: |
-            {
-              "LibraryA": {
-                "path": "LibraryA/LibraryA.csproj",
-                "patterns": ["LibraryA/**"],
-                "dependencies": ["LibraryB", "LibraryC"]
-              },
-              "LibraryB": {
-                "path": "LibraryB/LibraryB.csproj",
-                "patterns": ["LibraryB/**"],
-                "dependencies": ["LibraryC"]
-              },
-              "LibraryC": {
-                "path": "LibraryC/LibraryC.csproj",
-                "patterns": ["LibraryC/**"],
-                "dependencies": []
-              },
-              "LibraryD": {
-                "path": "LibraryD/LibraryD.nuspec",
-                "patterns": ["LibraryD/**"],
-                "dependencies": []
-              }
-            }
-          github_token: ${{ secrets.GITHUB_TOKEN }}
-
-      - name: Test Output
-        run: |
-          echo "Changed projects: ${{ steps.changes.outputs.changed_projects }}"
-          echo "Ordered changes: ${{ steps.changes.outputs.ordered_changes }}"
-          echo "Has nuspec: ${{ steps.changes.outputs.has_nuspec }}" 
