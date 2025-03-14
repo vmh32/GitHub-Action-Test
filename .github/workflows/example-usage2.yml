@@ -4,6 +4,12 @@ on:
   pull_request:
     types: [opened, reopened, synchronize, edited]
     branches: [ main ]
+    paths:
+      - 'LibraryA/**'
+      - 'LibraryB/**'
+      - 'LibraryC/**'
+      - 'LibraryD/**'
+      - '.github/workflows/**'
 
 permissions:
   contents: write
@@ -26,8 +32,13 @@ jobs:
           echo "Event: ${{ github.event_name }}"
           echo "Action: ${{ github.action }}"
           echo "Ref: ${{ github.ref }}"
+          echo "Working directory:"
+          ls -la
+          echo "Action directory:"
+          ls -la .github/actions/nuget-package-build-release
 
-      - uses: ./
+      - name: Run NuGet Package Build and Release
+        uses: ./.github/actions/nuget-package-build-release
         id: changes
         with:
           projects: |
