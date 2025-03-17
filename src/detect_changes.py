@@ -70,15 +70,26 @@ def order_projects(projects: Dict, modified_projects: Set[str]) -> List[str]:
             sys.exit(f"Error: Circular dependency detected involving {project_id}")
 
         visiting.add(project_id)
-        for dep in projects[project_id]['dependencies']:
-            if dep in modified_projects:
+        # Get dependencies from the project configuration
+        deps = projects[project_id].get('dependencies', [])
+        # Only process dependencies that are in the modified set
+        for dep in deps:
+            if dep in modified_projects and dep in projects:
                 visit(dep)
         visiting.remove(project_id)
         visited.add(project_id)
-        ordered.append(project_id)
+        if project_id in modified_projects:  # Only add if it was modified
+            ordered.append(project_id)
 
+    # First process projects with dependencies
     for project_id in modified_projects:
-        visit(project_id)
+        if project_id in projects and projects[project_id].get('dependencies'):
+            visit(project_id)
+
+    # Then add any remaining modified projects that have no dependencies
+    for project_id in modified_projects:
+        if project_id not in ordered:
+            ordered.append(project_id)
 
     return ordered
 
@@ -91,29 +102,38 @@ def main():
         if not projects_json:
             sys.exit("Error: INPUT_PROJECTS environment variable is required")
 
+        print("Starting change detection...")
+        print(f"Loaded configuration for {len(json.loads(projects_json))} projects")
+
         # Parse projects configuration
         projects = json.loads(projects_json)
 
         # Get changed files
+        print("Getting changed files...")
         changed_files = get_changed_files(token)
-        print(f"Debug: Changed files: {changed_files}")
+        print(f"Found {len(changed_files)} changed files: {changed_files}")
 
         # Detect modified projects
+        print("Detecting project changes...")
         modified_projects = detect_changes(projects, changed_files)
-        print(f"Debug: Modified projects: {modified_projects}")
+        print(f"Modified projects: {modified_projects}")
 
         # Order projects by dependencies
         ordered_projects = order_projects(projects, modified_projects)
-        print(f"Debug: Ordered projects: {ordered_projects}")
+        print(f"Projects in dependency order: {ordered_projects}")
 
         # Check if any modified project uses nuspec
         has_nuspec = any(projects[pid]['path'].endswith('.nuspec') for pid in modified_projects)
+        print(f"Has .nuspec files: {has_nuspec}")
 
         # Set outputs using GitHub Actions environment file
         with open(os.environ['GITHUB_OUTPUT'], 'a') as f:
-            f.write(f"modified_packages={json.dumps(list(modified_projects))}\n")
+            f.write(f"changes={json.dumps(list(modified_projects))}\n")
             f.write(f"ordered_changes={json.dumps(ordered_projects)}\n")
+            f.write(f"modified_packages={json.dumps(list(modified_projects))}\n")
             f.write(f"has_nuspec={str(has_nuspec).lower()}\n")
+
+        print("Change detection completed successfully")
 
     except Exception as e:
         sys.exit(f"Error: {str(e)}")
