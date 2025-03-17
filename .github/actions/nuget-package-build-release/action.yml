@@ -146,15 +146,12 @@ runs:
                     json.dump(package_map, f, indent=2)
                 print("Debug: Wrote package_map.json")
                 
-                # Generate filters YAML
+                # Generate filters YAML - Fixed format
                 with open(os.environ['GITHUB_OUTPUT'], 'a') as f:
-                    f.write("filters=")
-                    yaml_content = "filters: |\n"
+                    yaml_content = {}
                     for key, patterns in filters.items():
-                        yaml_content += f"  {key}:\n"
-                        for pattern in patterns:
-                            yaml_content += f"    - '{pattern}'\n"
-                    f.write(yaml_content + "\n")
+                        yaml_content[key] = patterns
+                    f.write(f"filters={json.dumps(yaml_content)}\n")
                 print("Debug: Wrote filters to GITHUB_OUTPUT")
                 
             except Exception as e:
