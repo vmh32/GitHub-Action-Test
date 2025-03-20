@@ -31,6 +31,8 @@ jobs:
           pip install requests
 
       - name: Run Tests
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         run: |
           cd .github/actions/nuget-package-build-release/src
           python -m unittest test_detect_changes.py -v
