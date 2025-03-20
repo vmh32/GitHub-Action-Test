@@ -1,11 +1,9 @@
-name: Build and Package Example (Old)
+name: Build and Package Example V2
 
 on:
-  workflow_dispatch:
-  # Disabled triggers
-  # pull_request:
-  #   types: [opened, reopened, synchronize, edited]
-  #   branches: [ main ]
+  push:
+    branches: [ Release1.7.0-test1 ]
+
 
 permissions:
   contents: write
@@ -13,28 +11,37 @@ permissions:
   packages: write
 
 jobs:
-  build-packages:
-    if: startsWith(github.head_ref, 'Release.')
-    runs-on: windows-latest
-    env:
-      GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+  detect-changes:
+    if: startsWith(github.ref_name, 'Release') || contains(github.ref_name, '-test')
+    runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v4
+      - name: Checkout code
+        uses: actions/checkout@v4
         with:
           fetch-depth: 0
-          ref: ${{ github.head_ref }}
-          clean: true
-          token: ${{ secrets.GITHUB_TOKEN }}
 
-      - name: Debug Info
-        run: |
-          echo "Branch: ${{ github.head_ref }}"
-          echo "Event: ${{ github.event_name }}"
-          echo "Action: ${{ github.action }}"
-          echo "Ref: ${{ github.ref }}"
-
-      - uses: ./
+      - name: Set up Python
+        uses: actions/setup-python@v4
         with:
+          python-version: '3.x'
+
+      - name: Install Python dependencies
+        run: |
+          python -m pip install --upgrade pip
+          pip install requests
+
+      - name: Run Tests
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          cd .github/actions/nuget-package-build-release/src
+          python -m unittest test_detect_changes.py -v
+
+      - name: Run NuGet Package Build and Release
+        id: build_release
+        uses: ./.github/actions/nuget-package-build-release
+        with:
+          github_token: ${{ secrets.GITHUB_TOKEN }}
           projects: |
             {
               "LibraryA": {
@@ -58,8 +65,14 @@ jobs:
                 "dependencies": []
               }
             }
-          github_token: ${{ secrets.GITHUB_TOKEN }}
-          dotnet_version: '8.0.x'
-          configuration: 'Release'
-          git_user_email: 'action@github.com'
-          git_user_name: 'GitHub Action' 
+
+      - name: Debug Output
+        run: |
+          echo "Changes: ${{ steps.build_release.outputs.changes }}"
+          echo "Modified packages: ${{ steps.build_release.outputs.modified_packages }}"
+          echo "Ordered changes: ${{ steps.build_release.outputs.ordered_changes }}"
+          echo "Has nuspec: ${{ steps.build_release.outputs.has_nuspec }}"
+
+      # - name: Further steps commented out for testing
+      #   run: |
+      #     echo "Further steps will be re-enabled after testing"

@@ -1,47 +1,38 @@
 name: 'NuGet Package Build and Release'
-description: 'Build and release NuGet packages with dependency management'
+description: 'Build and release NuGet packages'
 
 inputs:
-  projects:
-    description: 'Project configurations in JSON format'
-    required: true
   github_token:
-    description: 'GitHub token for API access'
+    description: 'GitHub token'
+    required: true
+  projects:
+    description: 'JSON object containing project configurations'
     required: true
 
 outputs:
   changes:
-    description: 'Array of filter names that were detected as changed'
-    value: ${{ steps.filter.outputs.changes }}
+    description: 'List of changed files'
+    value: ${{ steps.detect_changes.outputs.changes }}
   modified_packages:
-    description: 'List of projects that were changed'
-    value: ${{ steps.filter.outputs.modified_packages }}
+    description: 'List of modified packages'
+    value: ${{ steps.detect_changes.outputs.modified_packages }}
   ordered_changes:
-    description: 'List of projects in dependency order'
-    value: ${{ steps.filter.outputs.ordered_changes }}
+    description: 'List of packages in order of build'
+    value: ${{ steps.detect_changes.outputs.ordered_changes }}
   has_nuspec:
-    description: 'Whether any changed package uses nuspec'
-    value: ${{ steps.filter.outputs.has_nuspec }}
+    description: 'Whether any of the modified packages use nuspec'
+    value: ${{ steps.detect_changes.outputs.has_nuspec }}
 
 runs:
   using: "composite"
   steps:
-    - name: Debug Info
+    - name: Debug Environment
       shell: bash
       run: |
-        echo "Event name: ${{ github.event_name }}"
-        echo "Head ref: ${{ github.head_ref }}"
-        echo "Base ref: ${{ github.base_ref }}"
-        echo "Ref: ${{ github.ref }}"
+        echo "Current directory: $(pwd)"
+        echo "GitHub workspace: $GITHUB_WORKSPACE"
         echo "Action path: ${{ github.action_path }}"
-        echo "Workspace: ${{ github.workspace }}"
-        echo "Event path: ${{ github.event_path }}"
-        if [ -f "${{ github.event_path }}" ]; then
-          echo "Event file contents:"
-          cat "${{ github.event_path }}"
-        else
-          echo "Event file not found"
-        fi
+        ls -la
 
     - name: Checkout code
       uses: actions/checkout@v4
@@ -49,7 +40,7 @@ runs:
         fetch-depth: 0
 
     - name: Set up Python
-      uses: actions/setup-python@v5
+      uses: actions/setup-python@v4
       with:
         python-version: '3.x'
 
@@ -57,34 +48,74 @@ runs:
       shell: bash
       run: |
         python -m pip install --upgrade pip
-        pip install requests pyyaml
-
-    - name: List files in action directory
-      shell: bash
-      run: |
-        echo "Contents of ${{ github.action_path }}:"
-        ls -la ${{ github.action_path }}
-        echo "Contents of ${{ github.action_path }}/src:"
-        ls -la ${{ github.action_path }}/src || echo "src directory not found"
+        pip install requests
 
     - name: Filter Changes
-      id: filter
-      shell: bash
+      id: detect_changes
+      shell: python
       env:
         GITHUB_TOKEN: ${{ inputs.github_token }}
-        INPUT_PROJECTS: ${{ inputs.projects }}
       run: |
-        echo "Running change detection..."
-        if [ -f "${{ github.action_path }}/src/detect_changes.py" ]; then
-          python "${{ github.action_path }}/src/detect_changes.py"
-          echo "Change detection completed. Checking outputs..."
-          if [ -f "$GITHUB_OUTPUT" ]; then
-            echo "Contents of GITHUB_OUTPUT:"
-            cat "$GITHUB_OUTPUT"
-          else
-            echo "Warning: GITHUB_OUTPUT file not found"
-          fi
-        else
-          echo "Error: detect_changes.py not found at ${{ github.action_path }}/src/detect_changes.py"
-          exit 1
-        fi 
+        import os
+        import json
+        import sys
+        sys.path.append(os.path.join(os.environ['GITHUB_ACTION_PATH'], 'src'))
+        from detect_changes import detect_changes
+
+        with open(os.environ['GITHUB_EVENT_PATH'], 'r') as f:
+            event = json.load(f)
+
+        projects = json.loads('''${{ inputs.projects }}''')
+        
+        changes, modified_packages, ordered_changes, has_nuspec = detect_changes(
+            projects=projects,
+            event=event
+        )
+
+        with open(os.environ['GITHUB_OUTPUT'], 'a') as f:
+            print(f"changes={json.dumps(changes)}", file=f)
+            print(f"modified_packages={json.dumps(modified_packages)}", file=f)
+            print(f"ordered_changes={json.dumps(ordered_changes)}", file=f)
+            print(f"has_nuspec={json.dumps(has_nuspec)}", file=f)
+
+    # - name: Generate Configuration
+    #   id: generate_config
+    #   shell: python
+    #   run: |
+    #     import os
+    #     import json
+    #     import sys
+    #     sys.path.append(os.path.join(os.environ['GITHUB_ACTION_PATH'], 'src'))
+    #     from generate_config import generate_config
+
+    #     projects = json.loads('''${{ inputs.projects }}''')
+    #     modified_packages = json.loads('${{ steps.detect_changes.outputs.modified_packages }}')
+        
+    #     configs = generate_config(
+    #         projects=projects,
+    #         modified_packages=modified_packages
+    #     )
+
+    #     with open(os.environ['GITHUB_OUTPUT'], 'a') as f:
+    #         print(f"configs={json.dumps(configs)}", file=f)
+
+    # - name: Order Dependencies
+    #   id: order_dependencies
+    #   shell: python
+    #   run: |
+    #     import os
+    #     import json
+    #     import sys
+    #     sys.path.append(os.path.join(os.environ['GITHUB_ACTION_PATH'], 'src'))
+    #     from order_dependencies import order_dependencies
+
+    #     projects = json.loads('''${{ inputs.projects }}''')
+    #     modified_packages = json.loads('${{ steps.detect_changes.outputs.modified_packages }}')
+        
+    #     ordered = order_dependencies(
+    #         projects=projects,
+    #         modified_packages=modified_packages
+    #     )
+
+    #     with open(os.environ['GITHUB_OUTPUT'], 'a') as f:
+    #         print(f"ordered={json.dumps(ordered)}", file=f)

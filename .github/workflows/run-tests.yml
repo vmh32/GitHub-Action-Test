@@ -1,0 +1,27 @@
+name: Run Python Tests
+
+on:
+  push:
+    branches: [ Release1.7.0-test1 ]
+  pull_request:
+    branches: [ Release1.7.0-test1 ]
+
+jobs:
+  test:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      
+      - name: Set up Python
+        uses: actions/setup-python@v4
+        with:
+          python-version: '3.x'
+          
+      - name: Install dependencies
+        run: |
+          python -m pip install --upgrade pip
+          pip install requests
+
+      - name: Run tests
+        working-directory: .github/actions/nuget-package-build-release/src
+        run: python -m unittest test_detect_changes.py -v 
