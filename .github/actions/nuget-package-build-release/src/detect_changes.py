@@ -28,8 +28,9 @@ def get_changed_files_from_event(event: Dict) -> List[str]:
         return ["LibraryA/file.cs", "LibraryB/file.cs"]  # Default test files
 
     # GitHub API request
-    token = os.environ.get('GITHUB_TOKEN')
-    if not token:
+    try:
+        token = get_github_token()
+    except SystemExit:
         print("Warning: No GitHub token found, using test files")
         return ["LibraryA/file.cs", "LibraryB/file.cs"]  # Default test files
 
