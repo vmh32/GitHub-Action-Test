@@ -22,7 +22,7 @@ jobs:
           fetch-depth: 0
           ref: ${{ github.head_ref }}
 
-      - name: Run action2
+      - name: Run NuGet Package Build and Release
         uses: ./.github/actions/nuget-package-build-release
         with:
           github_token: ${{ secrets.GITHUB_TOKEN }}
