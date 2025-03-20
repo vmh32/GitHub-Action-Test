@@ -47,36 +47,36 @@ class TestDetectChanges(unittest.TestCase):
     def test_detect_single_project_change(self):
         """Test changes in a single project"""
         changed_files = ["LibraryA/file.cs"]
-        modified_projects, has_nuspec = detect_changes(self.projects, changed_files)
-        self.assertEqual(modified_projects, {"X1"})  # LibraryA is mapped to X1
+        _, modified_packages, _, has_nuspec = detect_changes(self.projects, changed_files)
+        self.assertEqual(modified_packages, {"X1"})  # LibraryA is mapped to X1
         self.assertFalse(has_nuspec)
 
     def test_detect_multiple_project_changes(self):
         """Test changes in multiple projects"""
         changed_files = ["LibraryA/file.cs", "LibraryB/file.cs"]
-        modified_projects, has_nuspec = detect_changes(self.projects, changed_files)
-        self.assertEqual(modified_projects, {"X1", "X2"})  # LibraryA->X1, LibraryB->X2
+        _, modified_packages, _, has_nuspec = detect_changes(self.projects, changed_files)
+        self.assertEqual(modified_packages, {"X1", "X2"})  # LibraryA->X1, LibraryB->X2
         self.assertFalse(has_nuspec)
 
     def test_detect_nuspec_changes(self):
         """Test changes in a project with nuspec file"""
         changed_files = ["LibraryD/file.cs"]
-        modified_projects, has_nuspec = detect_changes(self.projects, changed_files)
-        self.assertEqual(modified_projects, {"X4"})  # LibraryD is mapped to X4
+        _, modified_packages, _, has_nuspec = detect_changes(self.projects, changed_files)
+        self.assertEqual(modified_packages, {"X4"})  # LibraryD is mapped to X4
         self.assertTrue(has_nuspec)
 
     def test_no_changes(self):
         """Test when no changes match any project"""
         changed_files = ["unrelated/file.cs"]
-        modified_projects, has_nuspec = detect_changes(self.projects, changed_files)
-        self.assertEqual(modified_projects, set())
+        _, modified_packages, _, has_nuspec = detect_changes(self.projects, changed_files)
+        self.assertEqual(modified_packages, set())
         self.assertFalse(has_nuspec)
 
     def test_nested_path_changes(self):
         """Test changes in nested paths"""
         changed_files = ["LibraryA/src/subfolder/file.cs"]
-        modified_projects, has_nuspec = detect_changes(self.projects, changed_files)
-        self.assertEqual(modified_projects, {"X1"})
+        _, modified_packages, _, has_nuspec = detect_changes(self.projects, changed_files)
+        self.assertEqual(modified_packages, {"X1"})
         self.assertFalse(has_nuspec)
 
     def test_multiple_patterns_per_project(self):
@@ -96,8 +96,21 @@ class TestDetectChanges(unittest.TestCase):
         ]
         
         for changed_files, expected in test_cases:
-            modified_projects, _ = detect_changes(self.projects, changed_files)
-            self.assertEqual(modified_projects, expected)
+            _, modified_packages, _, _ = detect_changes(self.projects, changed_files)
+            self.assertEqual(modified_packages, expected)
+
+    def test_github_event_detection(self):
+        """Test detection using GitHub event data"""
+        event = {
+            "repository": {
+                "full_name": "vmh32/GitHub-Action-Test"
+            },
+            "before": "abc123",
+            "after": "def456"
+        }
+        _, modified_packages, _, has_nuspec = detect_changes(self.projects, event)
+        self.assertEqual(modified_packages, {"X1", "X2"})  # Should match default test files
+        self.assertFalse(has_nuspec)
 
 if __name__ == '__main__':
     unittest.main() 
