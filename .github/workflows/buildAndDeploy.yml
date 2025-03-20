@@ -1,0 +1,146 @@
+name: Build and Deploy Release
+
+on:
+  pull_request:
+    types: [closed]
+    branches: [ main ]
+
+jobs:
+  create-release:
+    # Only run if the PR was merged and the branch name matches Release.#.#.#
+    if: github.event.pull_request.merged == true && startsWith(github.event.pull_request.head.ref, 'Release.')
+    runs-on: windows-latest
+    
+    env:
+      RELEASE_TAG: ${{ github.event.pull_request.head.ref }}
+      GIT_USER_EMAIL: "action@github.com"
+      GIT_USER_NAME: "GitHub Action"
+
+    steps:
+    - uses: actions/checkout@v4
+      with:
+        fetch-depth: 0  # We need full history for tags
+        ref: main       # We want to tag the merge commit
+        clean: true
+
+    - name: Validate Release Tag Format
+      shell: bash
+      id: validate
+      run: |
+        if ! [[ ${{ env.RELEASE_TAG }} =~ ^Release\.[0-9]+\.[0-9]+\.[0-9]+$ ]]; then
+          echo "Error: Branch name must follow format Release.#.#.#"
+          exit 1
+        fi
+        echo "release_version=${RELEASE_TAG#Release.}" >> $GITHUB_OUTPUT
+
+    - name: Configure Git
+      shell: bash
+      run: |
+        git config --local user.email "${{ env.GIT_USER_EMAIL }}"
+        git config --local user.name "${{ env.GIT_USER_NAME }}"
+
+    # Pre-deployment verification step
+    - name: Verify Release Tag Doesn't Exist
+      shell: bash
+      id: verify_tag
+      run: |
+        if git rev-parse "refs/tags/${{ env.RELEASE_TAG }}" >/dev/null 2>&1; then
+          echo "Warning: Release tag ${{ env.RELEASE_TAG }} already exists"
+          echo "tag_exists=true" >> $GITHUB_OUTPUT
+          exit 1
+        fi
+        echo "tag_exists=false" >> $GITHUB_OUTPUT
+
+    # Add your Azure Functions deployment steps here
+    # Example:
+    - name: Setup .NET
+      uses: actions/setup-dotnet@v4
+      with:
+        dotnet-version: '8.0.x'
+
+    - name: Build and Publish Azure Function
+      shell: bash
+      run: |
+        # Add your build and publish steps here
+        echo "Building and publishing Azure Function..."
+        # dotnet publish YourFunction.csproj -c Release -o ./publish
+
+    - name: Deploy to Azure Functions
+      # uses: Azure/functions-action@v1
+      # with:
+      #   app-name: your-function-app-name
+      #   publish-profile: ${{ secrets.AZURE_FUNCTIONAPP_PUBLISH_PROFILE }}
+      #   package: ./publish
+      run: |
+        echo "Deploying to Azure Functions..."
+        # Add your actual deployment command here
+
+    # Only create tag and release if deployment was successful
+    - name: Create and Push Release Tag
+      if: success() && steps.verify_tag.outputs.tag_exists != 'true'
+      shell: bash
+      id: create_tag
+      run: |
+        echo "Creating release tag ${{ env.RELEASE_TAG }}"
+        if git tag -a "${{ env.RELEASE_TAG }}" -m "Release ${{ env.RELEASE_TAG }}" && \
+           git push origin "${{ env.RELEASE_TAG }}"; then
+          echo "Successfully created and pushed release tag"
+        else
+          echo "Error: Failed to create or push release tag"
+          exit 1
+        fi
+
+    - name: Create GitHub Release
+      if: success() && steps.verify_tag.outputs.tag_exists != 'true'
+      uses: actions/github-script@v7
+      with:
+        script: |
+          const releaseTag = process.env.RELEASE_TAG;
+          const releaseVersion = releaseTag.replace('Release.', '');
+          
+          // Get the PR description to use as release notes
+          const prBody = context.payload.pull_request.body || '';
+          
+          try {
+            const release = await github.rest.repos.createRelease({
+              owner: context.repo.owner,
+              repo: context.repo.repo,
+              tag_name: releaseTag,
+              name: `Release ${releaseVersion}`,
+              body: prBody,
+              draft: false,
+              prerelease: false,
+              generate_release_notes: true  // This will append automated release notes
+            });
+            
+            console.log(`Created release: ${release.data.html_url}`);
+          } catch (error) {
+            console.error('Failed to create release:', error);
+            throw error;
+          }
+
+    - name: Add Release Comment
+      if: always()  # Run this step regardless of previous step outcomes
+      uses: actions/github-script@v7
+      with:
+        script: |
+          const releaseTag = process.env.RELEASE_TAG;
+          const tagExists = '${{ steps.verify_tag.outputs.tag_exists }}' === 'true';
+          const deploymentSucceeded = '${{ job.status }}' === 'success';
+          
+          let commentBody;
+          if (tagExists) {
+            commentBody = `⚠️ Warning: Release tag \`${releaseTag}\` already existed. Deployment was skipped.`;
+          } else if (!deploymentSucceeded) {
+            commentBody = `❌ Deployment failed. No release tag or GitHub Release was created.`;
+          } else {
+            commentBody = `✅ Successfully deployed to Azure Functions and created release tag \`${releaseTag}\`.\n\n` +
+                        `[View Release](https://github.com/${context.repo.owner}/${context.repo.repo}/releases/tag/${releaseTag})`;
+          }
+          
+          await github.rest.issues.createComment({
+            owner: context.repo.owner,
+            repo: context.repo.repo,
+            issue_number: context.issue.number,
+            body: commentBody
+          }); 
