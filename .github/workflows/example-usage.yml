@@ -1,9 +1,8 @@
 name: Build and Package Example V2
 
 on:
-  pull_request:
-    types: [opened, reopened, synchronize, edited]
-    branches: [ main ]
+  push:
+    branches: [ Release1.7.0-test1 ]
 
 
 permissions:
@@ -13,14 +12,13 @@ permissions:
 
 jobs:
   detect-changes:
-    if: github.event_name == 'pull_request' && (startsWith(github.head_ref, 'Release') || contains(github.head_ref, '-test'))
+    if: startsWith(github.ref_name, 'Release') || contains(github.ref_name, '-test')
     runs-on: ubuntu-latest
     steps:
       - name: Checkout code
         uses: actions/checkout@v4
         with:
           fetch-depth: 0
-          ref: ${{ github.head_ref }}
 
       - name: Set up Python
         uses: actions/setup-python@v4
