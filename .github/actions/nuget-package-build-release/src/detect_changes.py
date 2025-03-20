@@ -64,7 +64,8 @@ def detect_changes(projects: Dict, changed_files: List[str]) -> Set[str]:
     modified_projects = set()
     
     # Create mapping from project_id to key
-    key_map = {project_id: f"X{idx+1}" for idx, project_id in enumerate(projects.keys())}
+    key_map = {project_id: f"X{idx+1}" for idx, (project_id, _) in enumerate(sorted(projects.items()))}
+    print(f"Project to key mapping: {key_map}")
     
     for file_path in changed_files:
         for project_id, config in projects.items():
@@ -73,6 +74,7 @@ def detect_changes(projects: Dict, changed_files: List[str]) -> Set[str]:
                 modified_projects.add(key_map[project_id])
                 break  # Move to next file once we find a matching project
     
+    print(f"Modified projects (with keys): {modified_projects}")
     return modified_projects
 
 def main():
