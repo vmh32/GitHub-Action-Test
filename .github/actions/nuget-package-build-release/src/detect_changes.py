@@ -58,19 +58,28 @@ def matches_pattern(file_path: str, patterns: List[str]) -> bool:
             return True
     return False
 
-def detect_changes(projects: Dict, changed_files: List[str]) -> Set[str]:
+def detect_changes(projects: Dict, changed_files: List[str]) -> tuple[Set[str], bool]:
     """Detect which projects were modified based on changed files."""
     print("Detecting project changes...")
     modified_projects = set()
+    has_nuspec = False
+    
+    # Create mapping from project_id to key
+    key_map = {project_id: f"X{idx+1}" for idx, (project_id, _) in enumerate(sorted(projects.items()))}
+    print(f"Project to key mapping: {key_map}")
     
     for file_path in changed_files:
         for project_id, config in projects.items():
             if matches_pattern(file_path, config['patterns']):
                 print(f"Project {project_id} was modified by {file_path}")
-                modified_projects.add(project_id)
+                key = key_map[project_id]
+                modified_projects.add(key)
+                if config['path'].endswith('.nuspec'):
+                    has_nuspec = True
                 break  # Move to next file once we find a matching project
     
-    return modified_projects
+    print(f"Modified projects (with keys): {modified_projects}")
+    return modified_projects, has_nuspec
 
 def main():
     """Main function."""
@@ -91,12 +100,16 @@ def main():
         changed_files = get_changed_files(token)
 
         # Detect modified projects
-        modified_projects = detect_changes(projects, changed_files)
+        modified_projects, has_nuspec = detect_changes(projects, changed_files)
         print(f"Modified projects: {modified_projects}")
 
-        # Set output in dorny format
+        # Set outputs in GitHub Actions format
         with open(os.environ['GITHUB_OUTPUT'], 'a') as f:
-            f.write(f"changes={json.dumps(list(modified_projects))}\n")
+            modified_list = list(modified_projects)
+            f.write(f"changes={json.dumps(modified_list)}\n")
+            f.write(f"modified_packages={json.dumps(modified_list)}\n")
+            f.write(f"ordered_changes={json.dumps(modified_list)}\n")  # We'll let the next step handle ordering
+            f.write(f"has_nuspec={str(has_nuspec).lower()}\n")
 
         print("Change detection completed successfully")
 

@@ -1,11 +1,10 @@
-name: Build and Package Example (Old)
+name: Build and Package Example V2
 
 on:
-  workflow_dispatch:
-  # Disabled triggers
-  # pull_request:
-  #   types: [opened, reopened, synchronize, edited]
-  #   branches: [ main ]
+  pull_request:
+    types: [opened, reopened, synchronize, edited]
+    branches: [ main ]
+
 
 permissions:
   contents: write
@@ -13,28 +12,21 @@ permissions:
   packages: write
 
 jobs:
-  build-packages:
-    if: startsWith(github.head_ref, 'Release.')
-    runs-on: windows-latest
-    env:
-      GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+  detect-changes:
+    if: github.event_name == 'pull_request' && startsWith(github.head_ref, 'Release')
+    runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v4
+      - name: Checkout code
+        uses: actions/checkout@v4
         with:
           fetch-depth: 0
           ref: ${{ github.head_ref }}
-          clean: true
-          token: ${{ secrets.GITHUB_TOKEN }}
 
-      - name: Debug Info
-        run: |
-          echo "Branch: ${{ github.head_ref }}"
-          echo "Event: ${{ github.event_name }}"
-          echo "Action: ${{ github.action }}"
-          echo "Ref: ${{ github.ref }}"
-
-      - uses: ./
+      - name: Run NuGet Package Build and Release
+        id: build_release
+        uses: ./.github/actions/nuget-package-build-release
         with:
+          github_token: ${{ secrets.GITHUB_TOKEN }}
           projects: |
             {
               "LibraryA": {
@@ -58,8 +50,10 @@ jobs:
                 "dependencies": []
               }
             }
-          github_token: ${{ secrets.GITHUB_TOKEN }}
-          dotnet_version: '8.0.x'
-          configuration: 'Release'
-          git_user_email: 'action@github.com'
-          git_user_name: 'GitHub Action' 
+
+      - name: Debug Output
+        run: |
+          echo "Changes: ${{ steps.build_release.outputs.changes }}"
+          echo "Modified packages: ${{ steps.build_release.outputs.modified_packages }}"
+          echo "Ordered changes: ${{ steps.build_release.outputs.ordered_changes }}"
+          echo "Has nuspec: ${{ steps.build_release.outputs.has_nuspec }}"
