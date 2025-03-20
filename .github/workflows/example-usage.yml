@@ -13,7 +13,7 @@ permissions:
 
 jobs:
   detect-changes:
-    if: github.event_name == 'pull_request' && startsWith(github.head_ref, 'Release')
+    if: github.event_name == 'pull_request' && (startsWith(github.head_ref, 'Release') || contains(github.head_ref, '-test'))
     runs-on: ubuntu-latest
     steps:
       - name: Checkout code
@@ -57,3 +57,7 @@ jobs:
           echo "Modified packages: ${{ steps.build_release.outputs.modified_packages }}"
           echo "Ordered changes: ${{ steps.build_release.outputs.ordered_changes }}"
           echo "Has nuspec: ${{ steps.build_release.outputs.has_nuspec }}"
+
+      # - name: Further steps commented out for testing
+      #   run: |
+      #     echo "Further steps will be re-enabled after testing"
