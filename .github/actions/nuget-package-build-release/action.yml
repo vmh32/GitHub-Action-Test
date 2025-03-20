@@ -78,7 +78,6 @@ runs:
         else
           echo "Error: detect_changes.py not found at ${{ github.action_path }}/src/detect_changes.py"
           exit 1
-<<<<<<< HEAD
         fi
 
     - name: Generate Configuration
@@ -247,6 +246,3 @@ runs:
             f.write(f'modified_packages=[{",".join(modified_packages)}]\n')
             f.write(f'has_nuspec={str(has_nuspec).lower()}\n')
         EOF 
-=======
-        fi
->>>>>>> fac82ada9a498adc06f282b0636185fdedc69280
