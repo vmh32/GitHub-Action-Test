@@ -1,47 +1,38 @@
-name: 'NuGet Package Build and Release V2'
-description: 'Build and release NuGet packages with dependency management (Version 2)'
+name: 'NuGet Package Build and Release'
+description: 'Build and release NuGet packages'
 
 inputs:
-  projects:
-    description: 'Project configurations in JSON format'
-    required: true
   github_token:
-    description: 'GitHub token for API access'
+    description: 'GitHub token'
+    required: true
+  projects:
+    description: 'JSON object containing project configurations'
     required: true
 
 outputs:
   changes:
-    description: 'Array of filter names that were detected as changed'
+    description: 'List of changed files'
     value: ${{ steps.detect_changes.outputs.changes }}
   modified_packages:
-    description: 'List of projects that were changed'
+    description: 'List of modified packages'
     value: ${{ steps.detect_changes.outputs.modified_packages }}
   ordered_changes:
-    description: 'List of projects in dependency order'
+    description: 'List of packages in order of build'
     value: ${{ steps.detect_changes.outputs.ordered_changes }}
   has_nuspec:
-    description: 'Whether any changed package uses nuspec'
+    description: 'Whether any of the modified packages use nuspec'
     value: ${{ steps.detect_changes.outputs.has_nuspec }}
 
 runs:
   using: "composite"
   steps:
-    - name: Debug Info
+    - name: Debug Environment
       shell: bash
       run: |
-        echo "Event name: ${{ github.event_name }}"
-        echo "Head ref: ${{ github.head_ref }}"
-        echo "Base ref: ${{ github.base_ref }}"
-        echo "Ref: ${{ github.ref }}"
+        echo "Current directory: $(pwd)"
+        echo "GitHub workspace: $GITHUB_WORKSPACE"
         echo "Action path: ${{ github.action_path }}"
-        echo "Workspace: ${{ github.workspace }}"
-        echo "Event path: ${{ github.event_path }}"
-        if [ -f "${{ github.event_path }}" ]; then
-          echo "Event file contents:"
-          cat "${{ github.event_path }}"
-        else
-          echo "Event file not found"
-        fi
+        ls -la
 
     - name: Checkout code
       uses: actions/checkout@v4
@@ -57,193 +48,72 @@ runs:
       shell: bash
       run: |
         python -m pip install --upgrade pip
-        python -m pip install requests
+        pip install requests
 
     - name: Filter Changes
       id: detect_changes
-      shell: bash
-      env:
-        GITHUB_TOKEN: ${{ inputs.github_token }}
-        INPUT_PROJECTS: ${{ inputs.projects }}
-      run: |
-        echo "Running change detection..."
-        if [ -f "${{ github.action_path }}/src/detect_changes.py" ]; then
-          python "${{ github.action_path }}/src/detect_changes.py"
-          echo "Change detection completed. Checking outputs..."
-          if [ -f "$GITHUB_OUTPUT" ]; then
-            echo "Contents of GITHUB_OUTPUT:"
-            cat "$GITHUB_OUTPUT"
-          else
-            echo "Warning: GITHUB_OUTPUT file not found"
-          fi
-        else
-          echo "Error: detect_changes.py not found at ${{ github.action_path }}/src/detect_changes.py"
-          exit 1
-        fi
-
-    - name: Generate Configuration
-      id: config
       shell: python
-      env:
-        INPUT_PROJECTS: ${{ inputs.projects }}
-        GITHUB_TOKEN: ${{ inputs.github_token }}
       run: |
-        import json
         import os
-        import sys
-        from pathlib import Path
-
-        print("Debug: Starting configuration generation")
-        
-        def process_projects(projects_json):
-            print(f"Debug: Processing projects JSON: {projects_json[:100]}...")
-            projects = json.loads(projects_json)
-            
-            # Create package mapping
-            package_map = {}
-            filters = {}
-            
-            for idx, (project_id, config) in enumerate(projects.items(), 1):
-                key = f"X{idx}"
-                path = config['path']
-                patterns = config.get('patterns', [f"{project_id}/**"])
-                deps = config.get('dependencies', [])
-                
-                # Create package map entry
-                package_map[key] = f"{project_id}:{path}:{'+'.join(deps)}"
-                
-                # Create filter entry
-                filters[key] = patterns
-                
-                print(f"Debug: Processed project {project_id} with key {key}")
-            
-            return package_map, filters
-
-        def main():
-            try:
-                # Get input from environment variable
-                projects_json = os.environ['INPUT_PROJECTS']
-                print("Debug: Retrieved INPUT_PROJECTS from environment")
-                
-                # Process projects
-                package_map, filters = process_projects(projects_json)
-                print("Debug: Projects processed successfully")
-                
-                # Ensure scripts directory exists
-                Path('scripts').mkdir(exist_ok=True)
-                print("Debug: Created scripts directory")
-                
-                # Write package map
-                with open('scripts/package_map.json', 'w') as f:
-                    json.dump(package_map, f, indent=2)
-                print("Debug: Wrote package_map.json")
-                
-                # Generate filters YAML
-                with open(os.environ['GITHUB_OUTPUT'], 'a') as f:
-                    f.write("filters=")
-                    yaml_content = "filters: |\n"
-                    for key, patterns in filters.items():
-                        yaml_content += f"  {key}:\n"
-                        for pattern in patterns:
-                            yaml_content += f"    - '{pattern}'\n"
-                    f.write(yaml_content + "\n")
-                print("Debug: Wrote filters to GITHUB_OUTPUT")
-                
-            except Exception as e:
-                print(f"Error in configuration generation: {str(e)}")
-                raise
-
-        if __name__ == '__main__':
-            main()
-
-    - name: Order Dependencies
-      id: order
-      shell: bash
-      run: |
-        python3 - << 'EOF'
         import json
         import sys
-        import os
-        from collections import defaultdict
+        sys.path.append(os.path.join(os.environ['GITHUB_ACTION_PATH'], 'src'))
+        from detect_changes import detect_changes
 
-        def load_package_map():
-            with open('scripts/package_map.json', 'r') as f:
-                return json.load(f)
+        with open(os.environ['GITHUB_EVENT_PATH'], 'r') as f:
+            event = json.load(f)
 
-        def create_graph(items, package_map):
-            graph = defaultdict(list)
-            nodes = set()
-            
-            # Create reverse mapping from library id to key
-            lib_to_key = {}
-            for key, value in package_map.items():
-                lib_id = value.split(':')[0]
-                lib_to_key[lib_id] = key
-            
-            # Parse the items and build the graph
-            for item in items:
-                key = item.strip('"')
-                if key in package_map:
-                    parts = package_map[key].split(':')
-                    deps = parts[2].split('+') if parts[2] else []
-                    nodes.add(key)
-                    for dep in deps:
-                        if dep and dep in lib_to_key:
-                            dep_key = lib_to_key[dep]
-                            if dep_key in package_map:
-                                graph[key].append(dep_key)
-                                nodes.add(dep_key)
-            return graph, nodes
-
-        def topological_sort(graph, nodes):
-            visited = set()
-            temp = set()
-            order = []
-            
-            def visit(node):
-                if node in temp:
-                    sys.exit(f"Error: Circular dependency detected involving {node}")
-                if node not in visited:
-                    temp.add(node)
-                    for dep in graph[node]:
-                        visit(dep)
-                    temp.remove(node)
-                    visited.add(node)
-                    order.append(node)
-            
-            for node in nodes:
-                if node not in visited:
-                    visit(node)
-            
-            return order
-
-        # Load package mapping
-        package_map = load_package_map()
-
-        # Get the changes from GitHub Actions environment
-        changes = '${{ steps.detect_changes.outputs.changes }}'
-        if changes == '[]':
-            with open(os.environ['GITHUB_OUTPUT'], 'a') as f:
-                f.write('ordered_changes=[]\n')
-                f.write('modified_packages=[]\n')
-                f.write('has_nuspec=false\n')
-            sys.exit(0)
-
-        # Remove brackets and split into items
-        modified_packages = [item.strip().strip('"') for item in changes.strip('[]').split(',')]
+        projects = json.loads('''${{ inputs.projects }}''')
         
-        # Create dependency graph
-        graph, nodes = create_graph(modified_packages, package_map)
-        
-        # Get topological order
-        ordered_keys = topological_sort(graph, nodes)
-        
-        # Check if any of the MODIFIED packages contain .nuspec
-        has_nuspec = any('.nuspec' in package_map[key] for key in modified_packages if key in package_map)
-        
-        # Output the results
+        changes, modified_packages, ordered_changes, has_nuspec = detect_changes(
+            projects=projects,
+            event=event
+        )
+
         with open(os.environ['GITHUB_OUTPUT'], 'a') as f:
-            f.write(f'ordered_changes=[{",".join(ordered_keys)}]\n')
-            f.write(f'modified_packages=[{",".join(modified_packages)}]\n')
-            f.write(f'has_nuspec={str(has_nuspec).lower()}\n')
-        EOF
+            print(f"changes={json.dumps(changes)}", file=f)
+            print(f"modified_packages={json.dumps(modified_packages)}", file=f)
+            print(f"ordered_changes={json.dumps(ordered_changes)}", file=f)
+            print(f"has_nuspec={json.dumps(has_nuspec)}", file=f)
+
+    # - name: Generate Configuration
+    #   id: generate_config
+    #   shell: python
+    #   run: |
+    #     import os
+    #     import json
+    #     import sys
+    #     sys.path.append(os.path.join(os.environ['GITHUB_ACTION_PATH'], 'src'))
+    #     from generate_config import generate_config
+
+    #     projects = json.loads('''${{ inputs.projects }}''')
+    #     modified_packages = json.loads('${{ steps.detect_changes.outputs.modified_packages }}')
+        
+    #     configs = generate_config(
+    #         projects=projects,
+    #         modified_packages=modified_packages
+    #     )
+
+    #     with open(os.environ['GITHUB_OUTPUT'], 'a') as f:
+    #         print(f"configs={json.dumps(configs)}", file=f)
+
+    # - name: Order Dependencies
+    #   id: order_dependencies
+    #   shell: python
+    #   run: |
+    #     import os
+    #     import json
+    #     import sys
+    #     sys.path.append(os.path.join(os.environ['GITHUB_ACTION_PATH'], 'src'))
+    #     from order_dependencies import order_dependencies
+
+    #     projects = json.loads('''${{ inputs.projects }}''')
+    #     modified_packages = json.loads('${{ steps.detect_changes.outputs.modified_packages }}')
+        
+    #     ordered = order_dependencies(
+    #         projects=projects,
+    #         modified_packages=modified_packages
+    #     )
+
+    #     with open(os.environ['GITHUB_OUTPUT'], 'a') as f:
+    #         print(f"ordered={json.dumps(ordered)}", file=f)
