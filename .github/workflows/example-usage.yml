@@ -22,6 +22,11 @@ jobs:
           fetch-depth: 0
           ref: ${{ github.head_ref }}
 
+      - name: Set up Python
+        uses: actions/setup-python@v4
+        with:
+          python-version: '3.x'
+
       - name: Run NuGet Package Build and Release
         id: build_release
         uses: ./.github/actions/nuget-package-build-release
