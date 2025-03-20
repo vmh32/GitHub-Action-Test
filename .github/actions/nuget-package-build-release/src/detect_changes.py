@@ -62,7 +62,7 @@ def matches_pattern(file_path: str, patterns: List[str]) -> bool:
             return True
     return False
 
-def detect_changes(projects: Dict, event_or_files: Union[Dict, List[str]]) -> Tuple[List[str], Set[str], List[str], bool]:
+def detect_changes(*, projects: Dict, event_or_files: Union[Dict, List[str]]) -> Tuple[List[str], Set[str], List[str], bool]:
     """Detect which projects were modified based on changed files.
     
     Args:
@@ -128,7 +128,10 @@ def main():
             event = json.load(f)
 
         # Detect modified projects
-        changes, modified_projects, ordered_changes, has_nuspec = detect_changes(projects, event)
+        changes, modified_projects, ordered_changes, has_nuspec = detect_changes(
+            projects=projects,
+            event_or_files=event
+        )
         print(f"Modified projects: {modified_projects}")
 
         # Get GITHUB_OUTPUT path
