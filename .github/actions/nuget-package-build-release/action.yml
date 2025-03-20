@@ -148,13 +148,7 @@ runs:
                 
                 # Generate filters YAML
                 with open(os.environ['GITHUB_OUTPUT'], 'a') as f:
-                    f.write("filters=")
-                    yaml_content = "filters: |\n"
-                    for key, patterns in filters.items():
-                        yaml_content += f"  {key}:\n"
-                        for pattern in patterns:
-                            yaml_content += f"    - '{pattern}'\n"
-                    f.write(yaml_content + "\n")
+                    f.write(f"filters={json.dumps(filters)}\n")
                 print("Debug: Wrote filters to GITHUB_OUTPUT")
                 
             except Exception as e:
