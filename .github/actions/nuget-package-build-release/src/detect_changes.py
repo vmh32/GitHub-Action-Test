@@ -114,8 +114,16 @@ def main():
         modified_projects, has_nuspec = detect_changes(projects, changed_files)
         print(f"Modified projects: {modified_projects}")
 
+        # Get GITHUB_OUTPUT path
+        github_output = os.environ.get('GITHUB_OUTPUT')
+        if not github_output:
+            sys.exit("Error: GITHUB_OUTPUT environment variable is required")
+
+        # Create the directory if it doesn't exist
+        os.makedirs(os.path.dirname(github_output), exist_ok=True)
+
         # Set outputs in GitHub Actions format
-        with open(os.environ['GITHUB_OUTPUT'], 'a') as f:
+        with open(github_output, 'a') as f:
             modified_list = list(modified_projects)
             f.write(f"changes={json.dumps(modified_list)}\n")
             f.write(f"modified_packages={json.dumps(modified_list)}\n")
