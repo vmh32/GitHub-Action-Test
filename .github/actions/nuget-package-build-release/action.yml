@@ -1,5 +1,5 @@
-name: 'NuGet Package Build and Release'
-description: 'Build and release NuGet packages with dependency management'
+name: 'NuGet Package Build and Release V2'
+description: 'Build and release NuGet packages with dependency management (Version 2)'
 
 inputs:
   projects:
@@ -146,12 +146,15 @@ runs:
                     json.dump(package_map, f, indent=2)
                 print("Debug: Wrote package_map.json")
                 
-                # Generate filters YAML - Fixed format
+                # Generate filters YAML
                 with open(os.environ['GITHUB_OUTPUT'], 'a') as f:
-                    yaml_content = {}
+                    f.write("filters=")
+                    yaml_content = "filters: |\n"
                     for key, patterns in filters.items():
-                        yaml_content[key] = patterns
-                    f.write(f"filters={json.dumps(yaml_content)}\n")
+                        yaml_content += f"  {key}:\n"
+                        for pattern in patterns:
+                            yaml_content += f"    - '{pattern}'\n"
+                    f.write(yaml_content + "\n")
                 print("Debug: Wrote filters to GITHUB_OUTPUT")
                 
             except Exception as e:
@@ -251,92 +254,4 @@ runs:
             f.write(f'ordered_changes=[{",".join(ordered_keys)}]\n')
             f.write(f'modified_packages=[{",".join(modified_packages)}]\n')
             f.write(f'has_nuspec={str(has_nuspec).lower()}\n')
-
-        # Write debug info to a file for the next step
-        with open('scripts/dependency_debug.json', 'w') as f:
-            debug_info = {
-                'package_map': package_map,
-                'modified_packages': modified_packages,
-                'dependency_graph': {k: v for k, v in graph.items()},
-                'ordered_keys': ordered_keys
-            }
-            json.dump(debug_info, f, indent=2)
-        EOF
-
-    - name: Debug Step Outputs
-      shell: bash
-      run: |
-        echo "=== Debug Step Outputs ==="
-        echo "Filter Changes Output:"
-        echo "changes: ${{ steps.filter.outputs.changes }}"
-        
-        echo -e "\nConfiguration Output:"
-        if [ -f "scripts/package_map.json" ]; then
-          echo "package_map.json contents:"
-          cat scripts/package_map.json
-        else
-          echo "package_map.json not found"
-        fi
-        
-        echo -e "\nOrder Dependencies Output:"
-        echo "ordered_changes: ${{ steps.order.outputs.ordered_changes }}"
-        echo "modified_packages: ${{ steps.order.outputs.modified_packages }}"
-        echo "has_nuspec: ${{ steps.order.outputs.has_nuspec }}"
-
-    - name: Debug Dependencies
-      shell: bash
-      run: |
-        echo "=== Dependency Debug Information ==="
-        echo "Reading debug info from scripts/dependency_debug.json..."
-        
-        python3 - << 'EOF'
-        import json
-        import sys
-        
-        try:
-            with open('scripts/dependency_debug.json', 'r') as f:
-                debug_info = json.load(f)
-            
-            package_map = debug_info['package_map']
-            modified_packages = debug_info['modified_packages']
-            dependency_graph = debug_info['dependency_graph']
-            ordered_keys = debug_info['ordered_keys']
-            
-            # Create reverse mapping for better readability
-            key_to_project = {}
-            for key, value in package_map.items():
-                project_id = value.split(':')[0]
-                key_to_project[key] = project_id
-            
-            print("\nModified Packages:")
-            print("=================")
-            for pkg in modified_packages:
-                if pkg in package_map:
-                    project_info = package_map[pkg].split(':')
-                    print(f"- {pkg} ({key_to_project[pkg]}):")
-                    print(f"  Path: {project_info[1]}")
-                    if project_info[2]:
-                        print(f"  Dependencies: {project_info[2].replace('+', ', ')}")
-                    else:
-                        print("  Dependencies: None")
-            
-            print("\nDependency Graph:")
-            print("================")
-            for key in dependency_graph:
-                deps = dependency_graph[key]
-                if deps:
-                    print(f"- {key_to_project[key]} depends on:")
-                    for dep in deps:
-                        print(f"  - {key_to_project[dep]}")
-                else:
-                    print(f"- {key_to_project[key]} has no dependencies")
-            
-            print("\nBuild Order:")
-            print("===========")
-            for i, key in enumerate(ordered_keys, 1):
-                print(f"{i}. {key_to_project[key]}")
-            
-        except Exception as e:
-            print(f"Error reading debug info: {str(e)}")
-            sys.exit(1)
         EOF 
