@@ -9,9 +9,9 @@ from typing import List, Set, Dict, Union, Tuple
 
 def get_github_token() -> str:
     """Get GitHub token from environment."""
-    token = os.environ.get('GITHUB_TOKEN')
+    token = os.environ.get('GITHUB_TOKEN') or os.environ.get('INPUT_GITHUB_TOKEN')
     if not token:
-        sys.exit("Error: GITHUB_TOKEN environment variable is required")
+        sys.exit("Error: GITHUB_TOKEN or INPUT_GITHUB_TOKEN environment variable is required")
     return token
 
 def get_changed_files_from_event(event: Dict) -> List[str]:
