@@ -15,7 +15,7 @@ def get_github_token() -> str:
     return token
 
 def get_changed_files(token: str) -> List[str]:
-    """Get list of changed files in the pull request."""
+    """Get list of changed files in the pull request or push."""
     print("Getting changed files...")
     
     # Get required environment variables
@@ -27,10 +27,21 @@ def get_changed_files(token: str) -> List[str]:
     with open(event_path) as f:
         event_data = json.load(f)
 
-    # Extract repository and PR information
+    # Extract repository information
     repo_full_name = event_data['repository']['full_name']
-    base_sha = event_data['pull_request']['base']['sha']
-    head_sha = event_data['pull_request']['head']['sha']
+
+    # Handle different event types
+    event_name = os.environ.get('GITHUB_EVENT_NAME', '')
+    print(f"Event type: {event_name}")
+
+    if event_name == 'pull_request':
+        base_sha = event_data['pull_request']['base']['sha']
+        head_sha = event_data['pull_request']['head']['sha']
+    elif event_name == 'push':
+        base_sha = event_data['before']
+        head_sha = event_data['after']
+    else:
+        sys.exit(f"Error: Unsupported event type: {event_name}")
 
     print(f"Comparing changes between {base_sha} and {head_sha}")
 
